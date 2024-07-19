@@ -1,5 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 # 读取电压和电流数据
 voltage_file = '电压.csv'
@@ -20,6 +21,7 @@ ax1.set_xlabel('Time')
 ax1.set_ylabel('Current (A)', color='tab:blue')
 ax1.plot(current_data['time'], current_data['val'], color='tab:blue', label='Current')
 ax1.tick_params(axis='y', labelcolor='tab:blue')
+ax1.grid(which='both', linestyle='--', linewidth=0.5)
 
 # 创建第二个y轴来绘制电压数据
 ax2 = ax1.twinx()
@@ -38,6 +40,12 @@ fig.tight_layout()
 ax1.legend(loc='upper left')
 ax2.legend(loc='upper right')
 
+ax2.yaxis.set_major_locator(plt.MultipleLocator(0.1))  # 主要刻度每0.1 V
+ax2.yaxis.set_minor_locator(plt.MultipleLocator(0.02))  # 次要刻度每0.02 V
+
+# 设置电流数据的主要和次要刻度
+ax1.yaxis.set_major_locator(plt.MultipleLocator(1))  # 主要刻度每1 A
+ax1.yaxis.set_minor_locator(plt.MultipleLocator(0.2))  #
 # 显示图表
 plt.title('Current and Voltage over Time')
 plt.show()

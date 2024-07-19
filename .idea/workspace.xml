@@ -4,17 +4,14 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d6de1619-cf3e-44a2-9b3a-f4f838ec2142" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/蓄电池特征.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/V(soh).py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/ccct,cvct.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/prepration.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/可视化.py" afterDir="false" />
+    <list default="true" id="d6de1619-cf3e-44a2-9b3a-f4f838ec2142" name="Changes" comment="exploration">
+      <change afterPath="$PROJECT_DIR$/cvtv.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/sum.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/平稳时长.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/电压变化率.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ccct,cvct.py" beforeDir="false" afterPath="$PROJECT_DIR$/ccct,cvct.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/可视化.py" beforeDir="false" afterPath="$PROJECT_DIR$/可视化.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -46,8 +43,12 @@
   "keyToString": {
     "Python.V(soh).executor": "Run",
     "Python.ccct,cvct.executor": "Run",
+    "Python.cvtv.executor": "Run",
     "Python.prepration.executor": "Run",
+    "Python.sum.executor": "Run",
     "Python.可视化.executor": "Run",
+    "Python.平稳时长.executor": "Run",
+    "Python.电压变化率.executor": "Run",
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true"
   }
@@ -68,6 +69,30 @@
       <option name="presentableId" value="Default" />
       <updated>1721287392348</updated>
     </task>
+    <task id="LOCAL-00001" summary="exploration">
+      <option name="closed" value="true" />
+      <created>1721356150725</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1721356150725</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="exploration" />
+    <option name="LAST_COMMIT_MESSAGE" value="exploration" />
   </component>
 </project>

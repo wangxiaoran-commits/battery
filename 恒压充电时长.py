@@ -31,7 +31,7 @@ def calculate_constant_voltage_duration(data, voltage_threshold):
 data = pd.read_csv('电压.csv')
 
 # 定义电压阈值
-voltage_threshold = 0.2
+voltage_threshold = 0.01
 
 # 存储所有电池的恒压充电时长
 all_durations = {}

@@ -5,13 +5,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="d6de1619-cf3e-44a2-9b3a-f4f838ec2142" name="Changes" comment="exploration">
-      <change afterPath="$PROJECT_DIR$/cvtv.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/sum.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/平稳时长.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/电压变化率.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/DTW动态规划.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/trial.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/特征值函数.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ccct,cvct.py" beforeDir="false" afterPath="$PROJECT_DIR$/ccct,cvct.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/可视化.py" beforeDir="false" afterPath="$PROJECT_DIR$/可视化.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ccct,cvct.py" beforeDir="false" afterPath="$PROJECT_DIR$/恒流充电时长.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cvtv.py" beforeDir="false" afterPath="$PROJECT_DIR$/恒压充电时长.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -41,13 +40,17 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "Python.DTW动态规划.executor": "Run",
     "Python.V(soh).executor": "Run",
     "Python.ccct,cvct.executor": "Run",
     "Python.cvtv.executor": "Run",
     "Python.prepration.executor": "Run",
     "Python.sum.executor": "Run",
+    "Python.trial.executor": "Run",
     "Python.可视化.executor": "Run",
     "Python.平稳时长.executor": "Run",
+    "Python.恒压充电时长.executor": "Run",
+    "Python.特征值函数.executor": "Run",
     "Python.电压变化率.executor": "Run",
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true"
@@ -77,7 +80,15 @@
       <option name="project" value="LOCAL" />
       <updated>1721356150725</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="exploration">
+      <option name="closed" value="true" />
+      <created>1721378284270</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1721378284270</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">

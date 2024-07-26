@@ -1,10 +1,10 @@
 import os
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
+from datetime import datetime
+from scipy.stats import wasserstein_distance
 
-import os
-import pandas as pd
-import matplotlib.pyplot as plt
 
 def main_function():
     # 文件路径
@@ -79,11 +79,207 @@ def main_function():
         for i in range(1, 25):
             battery_name = f'单体电池电压2V-{i:03d}电池'
             battery_data = data[data['clique_name'] == battery_name]
-            durations = calculate_durations(battery_data)
-            all_durations[battery_name] = durations
+            if battery_data.empty:
+                print(f"No data for {battery_name}")
+            else:
+                print(f"Processing data for {battery_name}")
+                durations = calculate_durations(battery_data)
+                all_durations[battery_name] = durations
 
         return all_durations
 
+    def calculate_constant_current_duration(data, current_threshold=2):
+        start_time = None
+        end_time = None
+        durations = []
+
+        for i in range(1, len(data)):
+            current_diff = abs(data.iloc[i]['val'] - data.iloc[i - 1]['val'])
+            if current_diff <= current_threshold:
+                if start_time is None:
+                    start_time = pd.to_datetime(data.iloc[i - 1]['time'])
+                end_time = pd.to_datetime(data.iloc[i]['time'])
+            else:
+                if start_time is not None and end_time is not None:
+                    duration = (end_time - start_time).total_seconds()
+                    durations.append(duration)
+                start_time = None
+                end_time = None
+
+        # 如果最后一段也是恒流的，需要记录下来
+        if start_time is not None and end_time is not None:
+            duration = (end_time - start_time).total_seconds()
+            durations.append(duration)
+
+        return durations
+
+    def calculate_cvct(data):
+        np.set_printoptions(threshold=np.inf)
+
+        # 确保数据按时间戳排序
+        data = data.sort_values(by='timestamp')
+
+        # 获取唯一的电池名称
+        batteries = [f'单体电池电压2V-{i:03d}电池' for i in range(1, 25)]
+
+        # 创建一个字典来存储每节电池的CVTCT值
+        cvct_dict = {}
+
+        # 处理每节电池的数据
+        for battery in batteries:
+            # 提取该电池的数据
+            battery_data = data[data['clique_name'] == battery].reset_index(drop=True)
+
+            # 确保有足够的数据点进行计算
+            if len(battery_data) > 1:
+                # 计算dV/dt
+                time_diff = np.diff(battery_data['timestamp'])
+                voltage_diff = np.diff(battery_data['val'])
+                dv_dt = voltage_diff / time_diff
+
+                # 打印中间数据以便调试
+                print(f"{battery} 电压变化率: {dv_dt}")
+
+                # 找到平稳区域（-0.0001 <= dV/dt <= 0.0002）
+                stable_region = (dv_dt >= -0.0001) & (dv_dt <= 0.0002)
+
+                # 打印平稳区域判断结果以便调试
+                print(f"{battery} 平稳区域标记: {stable_region}")
+
+                # 计算平稳区域的持续时间
+                stable_durations = []
+                current_duration = 0
+
+                for i in range(len(stable_region)):
+                    if stable_region[i]:
+                        current_duration += time_diff[i]
+                    else:
+                        if current_duration > 0:
+                            stable_durations.append(current_duration)
+                            current_duration = 0
+
+                # 添加最后一个持续时间
+                if current_duration > 0:
+                    stable_durations.append(current_duration)
+
+                # 打印所有的平稳区域持续时间以便调试
+                print(f"{battery} 平稳区域持续时间: {stable_durations}")
+
+                # 选取最长的平稳区域持续时间
+                if stable_durations:
+                    cvct = max(stable_durations)
+                else:
+                    cvct = np.nan  # 如果没有平稳区域，返回NaN
+            else:
+                cvct = np.nan  # 如果数据点不足，返回NaN
+
+            # 将结果存储在字典中
+            cvct_dict[battery] = cvct
+
+        return cvct_dict
+
+    def calculate_max_dv_dt(data):
+        # 确保数据按时间戳排序
+        data = data.sort_values(by='timestamp')
+
+        # 获取唯一的电池名称
+        batteries = [f'单体电池电压2V-{i:03d}电池' for i in range(1, 25)]
+
+        # 创建一个字典来存储每节电池的最大dV/dt值
+        max_dv_dt_dict = {}
+
+        # 处理每节电池的数据
+        for battery in batteries:
+            # 提取该电池的数据
+            battery_data = data[data['clique_name'] == battery]
+
+            # 确保有足够的数据点进行计算
+            if len(battery_data) > 1:
+                # 计算dV/dt
+                time_diff = np.diff(battery_data['timestamp'])
+                voltage_diff = np.diff(battery_data['val'])
+                dv_dt = voltage_diff / time_diff
+
+                # 找到最大dV/dt值
+                max_dv_dt = np.max(dv_dt)
+            else:
+                max_dv_dt = np.nan  # 如果数据点不足，返回NaN
+
+            # 将结果存储在字典中
+            max_dv_dt_dict[battery] = max_dv_dt
+
+        return max_dv_dt_dict
+
+    def calculate_dtw(data, initial_time_cutoff, current_time_cutoff):
+        # 分割数据
+        initial_curve = data[data['time'] <= initial_time_cutoff]
+        current_curve = data[data['time'] >= current_time_cutoff]
+
+        # 定义DTW函数
+        def dtw(A, B):
+            n, m = len(A), len(B)
+            M = np.zeros((n, m))
+
+            # 计算代价矩阵
+            for i in range(n):
+                for j in range(m):
+                    M[i, j] = (A[i] - B[j]) ** 2
+
+            # 初始化累积距离矩阵
+            r = np.zeros((n, m))
+            r[0, 0] = M[0, 0]
+
+            # 使用动态规划填充累积距离矩阵
+            for i in range(1, n):
+                r[i, 0] = M[i, 0] + r[i - 1, 0]
+            for j in range(1, m):
+                r[0, j] = M[0, j] + r[0, j - 1]
+            for i in range(1, n):
+                for j in range(1, m):
+                    r[i, j] = M[i, j] + min(r[i - 1, j - 1], r[i, j - 1], r[i - 1, j])
+
+            # DTW 距离
+            V_DTW = r[n - 1, m - 1]
+            return V_DTW
+
+        dtw_distances = []
+
+        # 计算每个电池的DTW距离
+        for i in range(1, 25):
+            battery_name = f'单体电池电压2V-{i:03d}电池'
+
+            initial_curve_battery = initial_curve[initial_curve['clique_name'] == battery_name]['val'].values
+            current_curve_battery = current_curve[current_curve['clique_name'] == battery_name]['val'].values
+
+            if len(initial_curve_battery) > 0 and len(current_curve_battery) > 0:
+                dtw_distance = dtw(initial_curve_battery, current_curve_battery)
+                dtw_distances.append((battery_name, dtw_distance))
+            else:
+                dtw_distances.append((battery_name, None))
+
+        return pd.DataFrame(dtw_distances, columns=['clique_name', 'DTW_distance'])
+
+    def calculate_wasserstein_distance(data, initial_time_cutoff, current_time_cutoff):
+        # 分割数据
+        initial_curve = data[data['time'] <= initial_time_cutoff]
+        current_curve = data[data['time'] >= current_time_cutoff]
+
+        wasserstein_distances = []
+
+        # 计算每个电池的Wasserstein距离
+        for i in range(1, 25):
+            battery_name = f'单体电池电压2V-{i:03d}电池'
+
+            initial_curve_battery = initial_curve[initial_curve['clique_name'] == battery_name]['val'].values
+            current_curve_battery = current_curve[current_curve['clique_name'] == battery_name]['val'].values
+
+            if len(initial_curve_battery) > 0 and len(current_curve_battery) > 0:
+                distance = wasserstein_distance(initial_curve_battery, current_curve_battery)
+                wasserstein_distances.append((battery_name, distance))
+            else:
+                wasserstein_distances.append((battery_name, None))
+
+        return pd.DataFrame(wasserstein_distances, columns=['clique_name', 'Wasserstein_distance'])
     def inner_function_vis():
         voltage_file = '电压.csv'
         current_file = '充电电流.csv'
@@ -136,20 +332,66 @@ def main_function():
     inner_function_vis()
 
     # 读取CSV文件
-    data = pd.read_csv('电压.csv')
+    data_voltage = pd.read_csv('电压.csv')
+    data_current = pd.read_csv('充电电流.csv')
 
-    # 定义电压阈值
-    voltage_threshold = 0.2
+    # 确保数据按照时间排序
+    data_current = data_current.sort_values(by='time')
+
+    # 定义阈值
+    voltage_threshold = 0.005
+    current_threshold = 2
 
     # 计算所有电池的恒压充电时长
-    all_durations = calculate_constant_voltage_duration(data, voltage_threshold)
+    all_voltage_durations = calculate_constant_voltage_duration(data_voltage, voltage_threshold)
 
-    # 打印结果
-    for battery, durations in all_durations.items():
+    # 打印恒压充电时长结果
+    for battery, durations in all_voltage_durations.items():
         print(f"Battery: {battery}, Constant Voltage Durations (in seconds): {durations}")
+
+    # 计算恒流充电时长
+    constant_current_durations = calculate_constant_current_duration(data_current, current_threshold)
+
+    # 输出恒流充电时长结果
+    for idx, duration in enumerate(constant_current_durations):
+        print(f"恒流充电时长 {idx + 1}: {duration} 秒")
+
+    # total_constant_current_duration = sum(constant_current_durations)
+    # print(f"总的恒流充电时间: {total_constant_current_duration} 秒")
+
+    # 计算电压变化率平稳时长
+    cvct_dict = calculate_cvct(data_voltage)
+
+    # 打印每节电池的CVCT值
+    for battery, cvct in cvct_dict.items():
+        print(f"{battery}: 恒压充电电压变化率平稳时长 {cvct:.2f} 秒")
+
+    # 计算最大充电电压变化率
+    max_dv_dt_dict = calculate_max_dv_dt(data_voltage)
+
+    # 打印每节电池的最大dV/dt值
+    for battery, max_dv_dt in max_dv_dt_dict.items():
+        print(f"{battery}: 最大充电电压变化率 {max_dv_dt:.6f} V/s")
+
+    # 定义时间分割点
+    initial_time_cutoff = datetime.strptime('2024-07-11 11:15', '%Y-%m-%d %H:%M')
+    current_time_cutoff = datetime.strptime('2024-07-11 21:20', '%Y-%m-%d %H:%M')
+
+    # 计算每个电池的DTW距离
+    dtw_distances_df = calculate_dtw(data_voltage, initial_time_cutoff, current_time_cutoff)
+
+    # 打印DTW距离结果
+    print(dtw_distances_df)
+
+    wasserstein_distances_df = calculate_wasserstein_distance(data_voltage, initial_time_cutoff, current_time_cutoff)
+
+    # 打印Wasserstein距离结果
+    print(wasserstein_distances_df)
+
 
 # 调用主函数
 main_function()
+
 
 
 

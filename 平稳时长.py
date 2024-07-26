@@ -33,7 +33,7 @@ for battery in batteries:
         stable_region = (dv_dt >= -0.0001) & (dv_dt <= 0.0002)
 
         # 打印平稳区域判断结果以便调试
-        print(f"{battery} 平稳区域标记: {stable_region}")
+        # print(f"{battery} 平稳区域标记: {stable_region}")
 
         # 计算平稳区域的持续时间
         stable_durations = []
@@ -52,7 +52,7 @@ for battery in batteries:
             stable_durations.append(current_duration)
 
         # 打印所有的平稳区域持续时间以便调试
-        print(f"{battery} 平稳区域持续时间: {stable_durations}")
+        # print(f"{battery} 平稳区域持续时间: {stable_durations}")
 
         # 选取最长的平稳区域持续时间
         if stable_durations:

@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from scipy.stats import wasserstein_distance
 
-
 def main_function():
     # 文件路径
     file_path = r"C:\Users\amber\Desktop\特征蓄电池吃\battery_0710-0712.csv"
@@ -82,7 +81,6 @@ def main_function():
             if battery_data.empty:
                 print(f"No data for {battery_name}")
             else:
-                print(f"Processing data for {battery_name}")
                 durations = calculate_durations(battery_data)
                 all_durations[battery_name] = durations
 
@@ -137,14 +135,8 @@ def main_function():
                 voltage_diff = np.diff(battery_data['val'])
                 dv_dt = voltage_diff / time_diff
 
-                # 打印中间数据以便调试
-                print(f"{battery} 电压变化率: {dv_dt}")
-
                 # 找到平稳区域（-0.0001 <= dV/dt <= 0.0002）
                 stable_region = (dv_dt >= -0.0001) & (dv_dt <= 0.0002)
-
-                # 打印平稳区域判断结果以便调试
-                print(f"{battery} 平稳区域标记: {stable_region}")
 
                 # 计算平稳区域的持续时间
                 stable_durations = []
@@ -161,9 +153,6 @@ def main_function():
                 # 添加最后一个持续时间
                 if current_duration > 0:
                     stable_durations.append(current_duration)
-
-                # 打印所有的平稳区域持续时间以便调试
-                print(f"{battery} 平稳区域持续时间: {stable_durations}")
 
                 # 选取最长的平稳区域持续时间
                 if stable_durations:
@@ -211,6 +200,9 @@ def main_function():
         return max_dv_dt_dict
 
     def calculate_dtw(data, initial_time_cutoff, current_time_cutoff):
+        # 确保数据按时间戳转换为datetime格式
+        data['time'] = pd.to_datetime(data['time'])
+
         # 分割数据
         initial_curve = data[data['time'] <= initial_time_cutoff]
         current_curve = data[data['time'] >= current_time_cutoff]
@@ -260,6 +252,9 @@ def main_function():
         return pd.DataFrame(dtw_distances, columns=['clique_name', 'DTW_distance'])
 
     def calculate_wasserstein_distance(data, initial_time_cutoff, current_time_cutoff):
+        # 确保数据按时间戳转换为datetime格式
+        data['time'] = pd.to_datetime(data['time'])
+
         # 分割数据
         initial_curve = data[data['time'] <= initial_time_cutoff]
         current_curve = data[data['time'] >= current_time_cutoff]
@@ -280,6 +275,7 @@ def main_function():
                 wasserstein_distances.append((battery_name, None))
 
         return pd.DataFrame(wasserstein_distances, columns=['clique_name', 'Wasserstein_distance'])
+
     def inner_function_vis():
         voltage_file = '电压.csv'
         current_file = '充电电流.csv'
@@ -387,7 +383,6 @@ def main_function():
 
     # 打印Wasserstein距离结果
     print(wasserstein_distances_df)
-
 
 # 调用主函数
 main_function()

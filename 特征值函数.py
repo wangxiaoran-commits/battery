@@ -6,6 +6,7 @@ from datetime import datetime
 from scipy.stats import wasserstein_distance
 
 def main_function():
+    #数据前期处理
     # 文件路径
     file_path = r"C:\Users\amber\Desktop\特征蓄电池吃\battery_0710-0712.csv"
 
@@ -45,26 +46,50 @@ def main_function():
         voltage_data_total.to_csv('电压.csv', index=False)
         internal_resistance_data_total.to_csv('电阻.csv', index=False)
 
-    def calculate_constant_voltage_duration(data, voltage_threshold):
+    def calculate_constant_voltage_duration(data, voltage_threshold=0.005):
+        """
+        计算每节电池的恒压充电时间
+
+        参数:
+        data (DataFrame): 包含电压数据的DataFrame，包含 'clique_name' 和 'val' 列
+        voltage_threshold (float): 电压变化率的阈值，小于该阈值的电压视为恒压，阈值默认设置为0.005，在六个特征值函数定义之后的地方也可以更改阈值
+
+        返回:
+        dict: 包含每节电池恒压充电时长的字典，键是电池名称，值是恒压持续时间列表（秒）
+        """
+
         def calculate_durations(battery_data):
+            """
+            计算单节电池在恒压充电阶段的持续时间
+
+            参数:
+            battery_data (DataFrame): 单节电池的数据，必须包含 'time' 和 'val' 列
+
+            返回:
+            list: 包含单节电池恒压充电时长的列表（秒）。
+            """
             durations = []
             start_time = None
             end_time = None
 
+            # 遍历电池数据，计算电压变化率
             for i in range(1, len(battery_data)):
                 voltage_diff = abs(battery_data.iloc[i]['val'] - battery_data.iloc[i - 1]['val'])
 
+                # 如果电压变化率小于等于阈值，则视为恒压状态
                 if voltage_diff <= voltage_threshold:
                     if start_time is None:
                         start_time = pd.to_datetime(battery_data.iloc[i - 1]['time'])
                     end_time = pd.to_datetime(battery_data.iloc[i]['time'])
                 else:
                     if start_time is not None and end_time is not None:
+                        # 计算持续时间并记录
                         duration = (end_time - start_time).total_seconds()
                         durations.append(duration)
                     start_time = None
                     end_time = None
 
+            # 处理最后一个持续时间段
             if start_time is not None and end_time is not None:
                 duration = (end_time - start_time).total_seconds()
                 durations.append(duration)
@@ -81,24 +106,40 @@ def main_function():
             if battery_data.empty:
                 print(f"No data for {battery_name}")
             else:
+                # 计算每节电池的恒压持续时间并记录
                 durations = calculate_durations(battery_data)
                 all_durations[battery_name] = durations
 
         return all_durations
 
     def calculate_constant_current_duration(data, current_threshold=2):
-        start_time = None
-        end_time = None
-        durations = []
+        """
+        计算恒流充电时间
 
+        参数:
+        data (DataFrame): 包含电流数据的DataFrame，必须包含 'time' 和 'val' 列
+        current_threshold (float): 电流变化率的阈值，小于该阈值的电流变化视为恒流，默认值为2，也可以自己设置
+
+        返回:
+        list: 包含恒流充电时长的列表（秒）。
+        """
+
+        start_time = None  # 记录恒流阶段的开始时间
+        end_time = None  # 记录恒流阶段的结束时间
+        durations = []  # 存储所有恒流阶段的持续时间
+
+        # 遍历电流数据，计算电流变化率
         for i in range(1, len(data)):
             current_diff = abs(data.iloc[i]['val'] - data.iloc[i - 1]['val'])
+
+            # 如果电流变化率小于等于阈值，则视为恒流状态
             if current_diff <= current_threshold:
                 if start_time is None:
                     start_time = pd.to_datetime(data.iloc[i - 1]['time'])
                 end_time = pd.to_datetime(data.iloc[i]['time'])
             else:
                 if start_time is not None and end_time is not None:
+                    # 计算持续时间并记录
                     duration = (end_time - start_time).total_seconds()
                     durations.append(duration)
                 start_time = None
@@ -112,15 +153,26 @@ def main_function():
         return durations
 
     def calculate_cvct(data):
+        """
+        计算每节电池在恒压充电阶段的电压变化率平稳时长（CVCT）
+
+        参数:
+        data (DataFrame): 包含电压数据的DataFrame，必须包含 'timestamp', 'clique_name' 和 'val' 列。
+
+        返回:
+        dict: 包含每节电池CVCT值的字典，键是电池名称，值是电压变化率平稳时长（秒）。
+        """
+
+        # 设置打印选项，确保打印完整数组
         np.set_printoptions(threshold=np.inf)
 
-        # 排序
+        # 确保数据按时间戳排序
         data = data.sort_values(by='timestamp')
 
-
+        # 获取唯一的电池名称
         batteries = [f'单体电池电压2V-{i:03d}电池' for i in range(1, 25)]
 
-        # 字典存储每节电池的CVTCT值
+        # 创建一个字典来存储每节电池的CVCT值
         cvct_dict = {}
 
         # 处理每节电池的数据
@@ -128,6 +180,7 @@ def main_function():
             # 提取该电池的数据
             battery_data = data[data['clique_name'] == battery].reset_index(drop=True)
 
+            # 确保有足够的数据点进行计算
             if len(battery_data) > 1:
                 # 计算dV/dt
                 time_diff = np.diff(battery_data['timestamp'])
@@ -167,6 +220,16 @@ def main_function():
         return cvct_dict
 
     def calculate_max_dv_dt(data):
+        """
+        计算每节电池在恒压充电阶段的最大电压变化率（dV/dt）
+
+        参数:
+        data (DataFrame): 包含电压数据的DataFrame，必须包含 'timestamp', 'clique_name' 和 'val' 列
+
+        返回:
+        dict: 包含每节电池最大dV/dt值的字典，键是电池名称，值是最大电压变化率（dV/dt）
+        """
+
         # 确保数据按时间戳排序
         data = data.sort_values(by='timestamp')
 
@@ -178,7 +241,7 @@ def main_function():
 
         # 处理每节电池的数据
         for battery in batteries:
-
+            # 提取该电池的数据
             battery_data = data[data['clique_name'] == battery]
 
             # 确保有足够的数据点进行计算
@@ -199,15 +262,37 @@ def main_function():
         return max_dv_dt_dict
 
     def calculate_dtw(data, initial_time_cutoff, current_time_cutoff):
+        """
+        计算每节电池在两个时间段内的动态时间规整（DTW）距离。
+
+        参数:
+        data (DataFrame): 包含电压数据的DataFrame，必须包含 'time' 和 'val' 列。
+        initial_time_cutoff (datetime): 第一个时间段的截止时间点。
+        current_time_cutoff (datetime): 第二个时间段的起始时间点。
+
+        返回:
+        DataFrame: 包含每节电池DTW距离的DataFrame，列为 'clique_name' 和 'DTW_distance'。
+        """
+
         # 确保数据按时间戳转换为datetime格式
         data['time'] = pd.to_datetime(data['time'])
 
-        # 分割数据
+        # 分割数据为初始时间段和当前时间段
         initial_curve = data[data['time'] <= initial_time_cutoff]
         current_curve = data[data['time'] >= current_time_cutoff]
 
-        # DTW
+        # 定义DTW计算函数
         def dtw(A, B):
+            """
+            计算两个时间序列A和B之间的动态时间规整（DTW）距离
+
+            参数:
+            A (array): 第一个时间序列
+            B (array): 第二个时间序列
+
+            返回:
+            float: 两个时间序列之间的DTW距离。
+            """
             n, m = len(A), len(B)
             M = np.zeros((n, m))
 
@@ -220,7 +305,7 @@ def main_function():
             r = np.zeros((n, m))
             r[0, 0] = M[0, 0]
 
-            # 动态规划
+            # 动态规划填充累积距离矩阵
             for i in range(1, n):
                 r[i, 0] = M[i, 0] + r[i - 1, 0]
             for j in range(1, m):
@@ -235,47 +320,71 @@ def main_function():
 
         dtw_distances = []
 
-        # 计算每个电池的DTW距离
+        # 计算每节电池的DTW距离
         for i in range(1, 25):
             battery_name = f'单体电池电压2V-{i:03d}电池'
 
+            # 提取电池在两个时间段的数据
             initial_curve_battery = initial_curve[initial_curve['clique_name'] == battery_name]['val'].values
             current_curve_battery = current_curve[current_curve['clique_name'] == battery_name]['val'].values
 
+            # 确保两个时间段都有数据点
             if len(initial_curve_battery) > 0 and len(current_curve_battery) > 0:
+                # 计算DTW距离
                 dtw_distance = dtw(initial_curve_battery, current_curve_battery)
                 dtw_distances.append((battery_name, dtw_distance))
             else:
                 dtw_distances.append((battery_name, None))
 
+        # 返回包含DTW距离的DataFrame
         return pd.DataFrame(dtw_distances, columns=['clique_name', 'DTW_distance'])
 
-    def calculate_wasserstein_distance(data, initial_time_cutoff, current_time_cutoff):
+    from scipy.stats import wasserstein_distance
 
+    def calculate_wasserstein_distance(data, initial_time_cutoff, current_time_cutoff):
+        """
+        计算每节电池两个时间段内的Wasserstein距离
+
+        参数:
+        data (DataFrame): 包含电压数据的DataFrame，必须包含 'time' 和 'val' 列
+        initial_time_cutoff (datetime): 第一个时间段的截止时间点
+        current_time_cutoff (datetime): 第二个时间段的起始时间点
+
+        返回:
+        DataFrame: 包含每节电池Wasserstein距离的DataFrame，列为 'clique_name' 和 'Wasserstein_distance'。
+        """
+
+        # 确保数据按时间戳转换为datetime格式
         data['time'] = pd.to_datetime(data['time'])
 
-        # 分割数据
+        # 分割数据为初始时间段和当前时间段
         initial_curve = data[data['time'] <= initial_time_cutoff]
         current_curve = data[data['time'] >= current_time_cutoff]
 
+        # 初始化存储Wasserstein距离的列表
         wasserstein_distances = []
 
-        # 计算每个电池Wasserstein距离
+        # 计算每节电池的Wasserstein距离
         for i in range(1, 25):
             battery_name = f'单体电池电压2V-{i:03d}电池'
 
+            # 提取电池在两个时间段的数据
             initial_curve_battery = initial_curve[initial_curve['clique_name'] == battery_name]['val'].values
             current_curve_battery = current_curve[current_curve['clique_name'] == battery_name]['val'].values
 
+            # 确保两个时间段都有数据点
             if len(initial_curve_battery) > 0 and len(current_curve_battery) > 0:
+                # 计算Wasserstein距离
                 distance = wasserstein_distance(initial_curve_battery, current_curve_battery)
                 wasserstein_distances.append((battery_name, distance))
             else:
                 wasserstein_distances.append((battery_name, None))
 
+        # 返回包含Wasserstein距离的DataFrame
         return pd.DataFrame(wasserstein_distances, columns=['clique_name', 'Wasserstein_distance'])
 
     def inner_function_vis():
+        '''用来可视化电流和电压的数据，可以根据图像自行设置恒流/恒压的阈值'''
         voltage_file = '电压.csv'
         current_file = '充电电流.csv'
 
@@ -323,7 +432,7 @@ def main_function():
         plt.title('Current and Voltage over Time')
         plt.show()
 
-
+    #数据可视化
     inner_function_vis()
 
     # 读取CSV文件
@@ -334,8 +443,8 @@ def main_function():
     data_current = data_current.sort_values(by='time')
 
     # 定义阈值
-    voltage_threshold = 0.005
-    current_threshold = 2
+    voltage_threshold = 0.005 #恒压阈值
+    current_threshold = 2  #恒流阈值
 
     # 计算所有电池的恒压充电时长
     all_voltage_durations = calculate_constant_voltage_duration(data_voltage, voltage_threshold)

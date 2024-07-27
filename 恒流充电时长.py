@@ -63,15 +63,18 @@
 # print(f"恒压充电时长（CVCT）：{cvct_duration} 秒")
 import pandas as pd
 
-# 加载数据
-data = pd.read_csv('二充.csv')
-
-# 确保数据按照时间排序
-data = data.sort_values(by='time')
-
-
 # 计算充电时长的函数
 def calculate_constant_current_duration(data, current_threshold=0.1):
+    """
+    计算恒流充电时长的函数。
+
+    参数:
+    data (DataFrame): 包含电流数据的DataFrame，必须包含 'time' 和 'val' 列。
+    current_threshold (float): 电流变化的阈值，小于该阈值的变化视为恒流。
+
+    返回:
+    list: 包含恒流充电时长的列表（秒）。
+    """
     start_time = None
     end_time = None
     durations = []
@@ -96,40 +99,40 @@ def calculate_constant_current_duration(data, current_threshold=0.1):
 
     return durations
 
+# 处理文件的函数
+def process_file(file_name, current_threshold=0.1):
+    """
+    处理指定文件并计算恒流充电时长。
 
-# 计算恒流充电时长
-constant_current_durations = calculate_constant_current_duration(data)
+    参数:
+    file_name (str): 文件名。
+    current_threshold (float): 电流变化的阈值，小于该阈值的变化视为恒流。
 
-# 输出结果
-for idx, duration in enumerate(constant_current_durations):
-    print(f"恒流充电时长 {idx + 1}: {duration} 秒")
+    返回:
+    tuple: 恒流充电时长的列表（秒）和总的恒流充电时间（秒）。
+    """
+    # 加载数据
+    data = pd.read_csv(file_name)
 
+    # 确保数据按照时间排序
+    data = data.sort_values(by='time')
 
-total_constant_current_duration = sum(constant_current_durations)
-print(f"总的恒流充电时间: {total_constant_current_duration} 秒")
-# 恒流充电时长 1: 20.0 秒
-# 恒流充电时长 2: 1279.0 秒
-# 恒流充电时长 3: 568.0 秒
-# 恒流充电时长 4: 1219.0 秒
-# 恒流充电时长 5: 797.0 秒
-# 恒流充电时长 6: 506.0 秒
-# 恒流充电时长 7: 939.0 秒
-# 恒流充电时长 8: 652.0 秒
-# 恒流充电时长 9: 1782.0 秒
-# 恒流充电时长 10: 17519.0 秒
-# 恒流充电时长 11: 25325.0 秒
-# 恒流充电时长 12: 50.0 秒
-# 恒流充电时长 13: 691.0 秒
-# 恒流充电时长 14: 900.0 秒
-# 恒流充电时长 15: 1783.0 秒
-# 恒流充电时长 16: 911.0 秒
-# 恒流充电时长 17: 650.0 秒
-# 恒流充电时长 18: 441.0 秒
-# 恒流充电时长 19: 819.0 秒
-# 恒流充电时长 20: 580.0 秒
-# 恒流充电时长 21: 2492.0 秒
-# 恒流充电时长 22: 2020.0 秒
-# 恒流充电时长 23: 18343.0 秒
-# 恒流充电时长 24: 17137.0 秒
-# 恒流充电时长 25: 49062.0 秒
-# 总的恒流充电时间: 146485.0 秒
+    # 计算恒流充电时长
+    constant_current_durations = calculate_constant_current_duration(data, current_threshold)
+
+    total_constant_current_duration = sum(constant_current_durations)
+
+    return constant_current_durations, total_constant_current_duration
+
+# 文件列表
+file_list = ['二充.csv', '三充.csv']
+
+# 处理每个文件
+for file_name in file_list:
+    durations, total_duration = process_file(file_name)
+
+    # 输出结果
+    print(f"\n文件: {file_name}")
+    for idx, duration in enumerate(durations):
+        print(f"恒流充电时长 {idx + 1}: {duration} 秒")
+    print(f"总的恒流充电时间: {total_duration} 秒")

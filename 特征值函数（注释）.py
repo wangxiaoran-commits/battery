@@ -5,8 +5,13 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from scipy.stats import wasserstein_distance
 
+import os
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
 def main_function():
-    #数据前期处理
+    # 数据前期处理
     # 文件路径
     file_path = r"C:\Users\amber\Desktop\特征蓄电池吃\battery_0710-0712.csv"
 
@@ -23,28 +28,77 @@ def main_function():
             # 过滤并分类数据
             voltage_data = chunk[chunk['clique_name'].str.contains('单体电池电压2V-')]
             internal_resistance_data = chunk[chunk['clique_name'].str.contains('单体电池电压2V内阻-')]
+            current_data = chunk[chunk['clique_name'].str.contains('充放电电流')]
 
-            return voltage_data, internal_resistance_data
+            return voltage_data, internal_resistance_data, current_data
 
         # 新建DataFrame
         voltage_data_total = pd.DataFrame()
         internal_resistance_data_total = pd.DataFrame()
+        current_data_total = pd.DataFrame()
 
         # 分块读取和处理
         chunk_size = 100000
 
         # 分块读取
         for chunk in pd.read_csv(file_path, chunksize=chunk_size):
-            voltage_data_chunk, internal_resistance_data_chunk = process_chunk(chunk)
+            voltage_data_chunk, internal_resistance_data_chunk, current_data_chunk = process_chunk(chunk)
 
             # 处理后的chunk加到总数据
             voltage_data_total = pd.concat([voltage_data_total, voltage_data_chunk], ignore_index=True)
-            internal_resistance_data_total = pd.concat([internal_resistance_data_total, internal_resistance_data_chunk],
-                                                       ignore_index=True)
+            internal_resistance_data_total = pd.concat([internal_resistance_data_total, internal_resistance_data_chunk], ignore_index=True)
+            current_data_total = pd.concat([current_data_total, current_data_chunk], ignore_index=True)
 
         # 保存
         voltage_data_total.to_csv('电压.csv', index=False)
         internal_resistance_data_total.to_csv('电阻.csv', index=False)
+        current_data_total.to_csv('电流.csv', index=False)
+
+    # 电流数据的分段处理
+    def segment_current_data(data, segments):
+        """
+        根据指定的时间段对数据进行分段。
+
+        参数:
+        data (DataFrame): 包含时间和电流数据的DataFrame
+        segments (list of tuples): 每个元组包含一个时间段的开始和结束时间。
+
+        返回:
+        dict: 每个键是时间段描述，值是对应时间段内的数据
+        """
+        segmented_data = {}
+        for start, end, label in segments:
+            if start is None:
+                segmented_data[label] = data[data['time'] <= end]
+            elif end is None:
+                segmented_data[label] = data[data['time'] >= start]
+            else:
+                segmented_data[label] = data[(data['time'] >= start) & (data['time'] <= end)]
+        return segmented_data
+
+    # 定义时间分割点
+    segments = [
+        (None, datetime.strptime('2024-07-10 11:11', '%Y-%m-%d %H:%M'), 'First Charge'),
+        (datetime.strptime('2024-07-10 21:10', '%Y-%m-%d %H:%M'), datetime.strptime('2024-07-11 11:14', '%Y-%m-%d %H:%M'), 'Second Charge'),
+        (datetime.strptime('2024-07-11 21:09', '%Y-%m-%d %H:%M'), None, 'Third Charge')
+    ]
+
+    # 加载电流数据
+    current_data = pd.read_csv('充电电流.csv')
+
+    # 确保数据按时间排序
+    current_data['time'] = pd.to_datetime(current_data['time'])
+    current_data = current_data.sort_values(by='time')
+
+    # 分段数据
+    segmented_current_data = segment_current_data(current_data, segments)
+
+    # 保存分段数据
+    for label, data in segmented_current_data.items():
+        data.to_csv(f'{label}.csv', index=False)
+        print(f"Saved {label} data to {label}.csv")
+
+
 
     def calculate_constant_voltage_duration(data, voltage_threshold=0.005):
         """
@@ -112,17 +166,67 @@ def main_function():
 
         return all_durations
 
-    def calculate_constant_current_duration(data, current_threshold=2):
+    def segment_current_data(data, segments):
+        """
+        根据指定的时间段对数据进行分段。
+
+        参数:
+        data (DataFrame): 包含时间和电流数据的DataFrame
+        segments (list of tuples): 每个元组包含一个时间段的开始和结束时间。
+
+        返回:
+        dict: 每个键是时间段描述，值是对应时间段内的数据
+        """
+        segmented_data = {}
+        for start, end, label in segments:
+            if start is None:
+                segmented_data[label] = data[data['time'] <= end]
+            elif end is None:
+                segmented_data[label] = data[data['time'] >= start]
+            else:
+                segmented_data[label] = data[(data['time'] >= start) & (data['time'] <= end)]
+        return segmented_data
+
+    # 定义时间分割点
+    segments = [
+        (None, datetime.strptime('2024-07-10 11:11', '%Y-%m-%d %H:%M'), 'First Charge'),
+        (datetime.strptime('2024-07-10 21:10', '%Y-%m-%d %H:%M'), datetime.strptime('2024-07-11 11:14', '%Y-%m-%d %H:%M'), 'Second Charge'),
+        (datetime.strptime('2024-07-11 21:09', '%Y-%m-%d %H:%M'), None, 'Third Charge')
+    ]
+
+    # 加载电流数据
+    current_data = pd.read_csv('电流.csv')
+
+    # 确保数据按时间排序
+    current_data['time'] = pd.to_datetime(current_data['time'])
+    current_data = current_data.sort_values(by='time')
+
+    # 分段数据
+    segmented_current_data = segment_current_data(current_data, segments)
+
+    # 保存分段数据
+    for label, data in segmented_current_data.items():
+        data.to_csv(f'{label}.csv', index=False)
+        print(f"Saved {label} data to {label}.csv")
+
+    # 计算恒流充电时长的函数
+    def calculate_constant_current_duration(file_path, current_threshold=0.1):
         """
         计算恒流充电时间
 
         参数:
-        data (DataFrame): 包含电流数据的DataFrame，必须包含 'time' 和 'val' 列
-        current_threshold (float): 电流变化率的阈值，小于该阈值的电流变化视为恒流，默认值为2，也可以自己设置
+        file_path (str): CSV文件路径
+        current_threshold (float): 电流变化率的阈值，小于该阈值的电流变化视为恒流，默认值为0.1，也可以自己设置
 
         返回:
-        list: 包含恒流充电时长的列表（秒）。
+        list: 包含恒流充电时长的列表（秒）
         """
+        # 加载数据，file_path的具体数据在下面的循环中，遍历主函数中根据时间分段后的每一段充电时间，这里有三段
+        data = pd.read_csv(file_path)
+
+        # 确保数据按时间排序
+        data['time'] = pd.to_datetime(data['time'])
+        data = data.sort_values(by='time')
 
         start_time = None  # 记录恒流阶段的开始时间
         end_time = None  # 记录恒流阶段的结束时间
@@ -152,6 +256,23 @@ def main_function():
 
         return durations
 
+    # 处理每个分段文件，这里的电流分段是在main函数中已经处理过的部分，按照时间分成三段充电时间，因此是三段恒流充电的计算，这里的列表存储着分段的数据，可以自行修改
+    for label in ['First Charge', 'Second Charge', 'Third Charge']:
+        file_path = f'{label}.csv'
+        durations = calculate_constant_current_duration(file_path)
+        total_duration = sum(durations)
+
+        # 输出结果
+        print(f"\n{label}：")
+        for idx, duration in enumerate(durations):
+            print(f"恒流充电时长 {idx + 1}: {duration} 秒")
+        print(f"总的恒流充电时间: {total_duration} 秒")
+
+        # 保存结果到文件
+        with open(f'{label}_durations.txt', 'w') as f:
+            for idx, duration in enumerate(durations):
+                f.write(f"恒流充电时长 {idx + 1}: {duration} 秒\n")
+            f.write(f"总的恒流充电时间: {total_duration} 秒\n")
     def calculate_cvct(data):
         """
         计算每节电池在恒压充电阶段的电压变化率平稳时长（CVCT）

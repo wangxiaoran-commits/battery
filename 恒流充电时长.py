@@ -64,14 +64,14 @@
 import pandas as pd
 
 # 加载数据
-data = pd.read_csv('充电电流.csv')
+data = pd.read_csv('二充.csv')
 
 # 确保数据按照时间排序
 data = data.sort_values(by='time')
 
 
 # 计算充电时长的函数
-def calculate_constant_current_duration(data, current_threshold=2):
+def calculate_constant_current_duration(data, current_threshold=0.1):
     start_time = None
     end_time = None
     durations = []

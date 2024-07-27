@@ -57,14 +57,14 @@ def main_function():
     # 电流数据的分段处理
     def segment_current_data(data, segments):
         """
-        根据指定的时间段对数据进行分段。
+        根据指定的时间段对数据进行分隔，以便分段计算恒流充电时间，作为几个特征值
 
         参数:
         data (DataFrame): 包含时间和电流数据的DataFrame
-        segments (list of tuples): 每个元组包含一个时间段的开始和结束时间。
+        segments (list of tuples): 每个元组包含一个时间段的开始和结束时间
 
         返回:
-        dict: 每个键是时间段描述，值是对应时间段内的数据
+        dict: 每个键是时间段，值是对应时间段内的数据
         """
         segmented_data = {}
         for start, end, label in segments:
@@ -77,13 +77,14 @@ def main_function():
         return segmented_data
 
     # 定义时间分割点
+    #在10号11：11之前是第一次充电，10号的21：10到11号的11：14是第二次充电，11号21：09之后是第三次充电
     segments = [
         (None, datetime.strptime('2024-07-10 11:11', '%Y-%m-%d %H:%M'), 'First Charge'),
         (datetime.strptime('2024-07-10 21:10', '%Y-%m-%d %H:%M'), datetime.strptime('2024-07-11 11:14', '%Y-%m-%d %H:%M'), 'Second Charge'),
         (datetime.strptime('2024-07-11 21:09', '%Y-%m-%d %H:%M'), None, 'Third Charge')
     ]
 
-    # 加载电流数据
+    # 原始电流数据，要求有‘time’，‘clique_name’,'val','timestamp'列
     current_data = pd.read_csv('充电电流.csv')
 
     # 确保数据按时间排序
@@ -93,7 +94,7 @@ def main_function():
     # 分段数据
     segmented_current_data = segment_current_data(current_data, segments)
 
-    # 保存分段数据
+    # 保存分段数据，在计算恒流充电时间时直接使用
     for label, data in segmented_current_data.items():
         data.to_csv(f'{label}.csv', index=False)
         print(f"Saved {label} data to {label}.csv")

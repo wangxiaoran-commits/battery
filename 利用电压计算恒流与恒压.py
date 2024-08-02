@@ -9,12 +9,20 @@ data = pd.read_csv('电压.csv')
 # 将time列转换为datetime格式
 data['time'] = pd.to_datetime(data['time'])
 
+# 读取电流数据
+current_data = pd.read_csv('电流.csv')
+
+# 将time列转换为datetime格式
+current_data['time'] = pd.to_datetime(current_data['time'])
+
 # 定义时间分割点
-current_time_cutoff = datetime.strptime('2024-07-11 13:20', '%Y-%m-%d %H:%M')
+current_time_cutoff_voltage = datetime.strptime('2024-07-11 13:20', '%Y-%m-%d %H:%M')
+current_time_cutoff_current = datetime.strptime('2024-07-11 13:20', '%Y-%m-%d %H:%M')
 peak_time_cutoff = datetime.strptime('2024-07-12 00:00', '%Y-%m-%d %H:%M')
 
 # 过滤出时间大于等于current_time_cutoff的数据
-filtered_data = data[data['time'] >= current_time_cutoff]
+filtered_voltage_data = data[data['time'] >= current_time_cutoff_voltage]
+filtered_current_data = current_data[current_data['time'] >= current_time_cutoff_current]
 
 # 初始化存储结果的字典
 stages_dict = {'Battery': [], 'Stage': [], 'Start_Time': [], 'End_Time': []}
@@ -22,7 +30,7 @@ stages_dict = {'Battery': [], 'Stage': [], 'Start_Time': [], 'End_Time': []}
 # 分析每节电池
 for i in range(1, 25):
     battery_name = f'单体电池电压2V-{i:03d}电池'
-    battery_data = filtered_data[filtered_data['clique_name'] == battery_name].copy()
+    battery_data = filtered_voltage_data[filtered_voltage_data['clique_name'] == battery_name].copy()
 
     # 找到在peak_time_cutoff之前的电压最大值
     pre_peak_data = battery_data[battery_data['time'] <= peak_time_cutoff]
@@ -32,7 +40,17 @@ for i in range(1, 25):
 
         # 第三阶段的起始和结束点
         steady_rise_start = max_idx
-        steady_rise_end = battery_data.index[-1]
+
+        # 获取第三阶段开始后的电流数据
+        post_steady_rise_current_data = filtered_current_data[filtered_current_data['time'] >= battery_data.loc[steady_rise_start]['time']]
+
+        # 找到电流小于1.8的第一个时间点
+        steady_rise_end_time = post_steady_rise_current_data[post_steady_rise_current_data['val'] < 1.8]['time'].min()
+
+        if pd.notna(steady_rise_end_time):
+            steady_rise_end = battery_data[battery_data['time'] >= steady_rise_end_time].index[0]
+        else:
+            steady_rise_end = battery_data.index[-1]
 
         # 存储第三阶段信息
         stages_dict['Battery'].append(battery_name)
@@ -84,6 +102,7 @@ for i in range(1, 25):
         stages_dict['Stage'].append('恒压阶段')
         stages_dict['Start_Time'].append(None)
         stages_dict['End_Time'].append(None)
+
 
 # 转换为DataFrame
 stages_df = pd.DataFrame(stages_dict)

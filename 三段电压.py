@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import numpy as np
-np.set_printoptions(threshold=np.inf)
+
 # 读取所有电压数据
 data = pd.read_csv('电压.csv')
 
@@ -36,7 +36,7 @@ for i in range(1, 25):
 
         # 存储第三阶段信息
         stages_dict['Battery'].append(battery_name)
-        stages_dict['Stage'].append('steady_rise')
+        stages_dict['Stage'].append('恒压阶段')
         stages_dict['Start_Time'].append(battery_data.loc[steady_rise_start]['time'])
         stages_dict['End_Time'].append(battery_data.loc[steady_rise_end]['time'])
 
@@ -48,19 +48,17 @@ for i in range(1, 25):
             next_point = first_stage_end
             # 找到下一个十五分钟的点
             time_check = battery_data.loc[first_stage_end]['time'] + timedelta(minutes=15)
-            future_points = battery_data[(battery_data['time'] >= battery_data.loc[first_stage_end]['time']) & (
-                        battery_data['time'] <= time_check)]
+            future_points = battery_data[(battery_data['time'] >= battery_data.loc[first_stage_end]['time']) & (battery_data['time'] <= time_check)]
             if len(future_points) > 1:
                 next_point = future_points.index[-1]
-            if (battery_data.loc[next_point]['time'] - battery_data.loc[first_stage_end][
-                'time']).total_seconds() >= 15 * 60:
-                if abs(battery_data.loc[next_point]['val'] - battery_data.loc[first_stage_end]['val']) <= 0.004:
+            if (battery_data.loc[next_point]['time'] - battery_data.loc[first_stage_end]['time']).total_seconds() >= 15 * 60:
+                if abs(battery_data.loc[next_point]['val'] - battery_data.loc[first_stage_end]['val']) <= 0.0025:
                     break
             first_stage_end = next_point
 
         # 存储第一阶段信息
         stages_dict['Battery'].append(battery_name)
-        stages_dict['Stage'].append('fast_growth')
+        stages_dict['Stage'].append('恒流（快）')
         stages_dict['Start_Time'].append(battery_data.loc[first_stage_start]['time'])
         stages_dict['End_Time'].append(battery_data.loc[first_stage_end]['time'])
 
@@ -71,18 +69,27 @@ for i in range(1, 25):
         # 存储第二阶段信息
         if slow_growth_start <= slow_growth_end:
             stages_dict['Battery'].append(battery_name)
-            stages_dict['Stage'].append('slow_growth')
+            stages_dict['Stage'].append('恒流（慢）')
             stages_dict['Start_Time'].append(battery_data.loc[slow_growth_start]['time'])
             stages_dict['End_Time'].append(battery_data.loc[slow_growth_end]['time'])
+        else:
+            # 如果没有满足条件的第二阶段
+            stages_dict['Battery'].append(battery_name)
+            stages_dict['Stage'].append('恒流（慢）')
+            stages_dict['Start_Time'].append(None)
+            stages_dict['End_Time'].append(None)
     else:
         # 如果没有找到最大值，则记录该电池没有第三阶段
         stages_dict['Battery'].append(battery_name)
-        stages_dict['Stage'].append('steady_rise')
+        stages_dict['Stage'].append('恒压阶段')
         stages_dict['Start_Time'].append(None)
         stages_dict['End_Time'].append(None)
 
-    # 转换为DataFrame
+# 转换为DataFrame
 stages_df = pd.DataFrame(stages_dict)
 
-    # 打印阶段划分结果
+pd.set_option('display.max_rows', 500)
+pd.set_option('display.max_columns', 100)
+pd.set_option('display.width', 1000)
+
 print(stages_df)

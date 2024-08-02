@@ -1,14 +1,9 @@
 import os
 import pandas as pd
 import numpy as np
+from datetime import datetime
 import matplotlib.pyplot as plt
-from datetime import datetime
 from scipy.stats import wasserstein_distance
-
-import os
-import pandas as pd
-import numpy as np
-from datetime import datetime
 
 def main_function():
     # 数据前期处理
@@ -49,7 +44,7 @@ def main_function():
             internal_resistance_data_total = pd.concat([internal_resistance_data_total, internal_resistance_data_chunk], ignore_index=True)
             current_data_total = pd.concat([current_data_total, current_data_chunk], ignore_index=True)
 
-        # 保存
+        # 将原始数据根据变量名分为‘电压’，‘电流’和‘电阻’并储存下来
         voltage_data_total.to_csv('电压.csv', index=False)
         internal_resistance_data_total.to_csv('电阻.csv', index=False)
         current_data_total.to_csv('电流.csv', index=False)
@@ -78,7 +73,6 @@ def main_function():
         return segmented_data
 
     # 定义时间分割点
-    #在10号11：11之前是第一次充电，10号的21：10到11号的11：14是第二次充电，11号21：09之后是第三次充电
     segments = [
         (None, datetime.strptime('2024-07-10 11:11', '%Y-%m-%d %H:%M'), 'First Charge'),
         (datetime.strptime('2024-07-10 21:10', '%Y-%m-%d %H:%M'), datetime.strptime('2024-07-11 11:14', '%Y-%m-%d %H:%M'), 'Second Charge'),
@@ -99,8 +93,6 @@ def main_function():
     for label, data in segmented_current_data.items():
         data.to_csv(f'{label}.csv', index=False)
         print(f"Saved {label} data to {label}.csv")
-
-
 
     def calculate_constant_voltage_duration(data, voltage_threshold=0.005):
         """
@@ -168,21 +160,20 @@ def main_function():
 
         return all_durations
 
-
     # 计算恒流充电时长的函数
-    def calculate_constant_current_duration(file_path, current_threshold=0.1):
+    def calculate_constant_current_duration(segment_file_path, current_threshold=0.1):
         """
         计算恒流充电时间
 
         参数:
-        file_path (str): CSV文件路径
+        segment_file_path (str): CSV文件路径
         current_threshold (float): 电流变化率的阈值，小于该阈值的电流变化视为恒流，默认值为0.1，也可以自己设置
 
         返回:
         list: 包含恒流充电时长的列表（秒）
         """
-        # 加载数据，file_path的具体数据在下面的循环中，遍历主函数中根据时间分段后的每一段充电时间，这里有三段
-        data = pd.read_csv(file_path)
+        # 加载数据
+        data = pd.read_csv(segment_file_path)
 
         # 确保数据按时间排序
         data['time'] = pd.to_datetime(data['time'])
@@ -216,10 +207,10 @@ def main_function():
 
         return durations
 
-    # 处理每个分段文件，这里的电流分段是在main函数中已经处理过的部分，按照时间分成三段充电时间，因此是三段恒流充电的计算，这里的列表存储着分段的数据，可以自行修改
+    # 处理每个分段文件
     for label in ['First Charge', 'Second Charge', 'Third Charge']:
-        file_path = f'{label}.csv'
-        durations = calculate_constant_current_duration(file_path)
+        segment_file_path = f'{label}.csv'
+        durations = calculate_constant_current_duration(segment_file_path)
         total_duration = sum(durations)
 
         # 输出结果
@@ -227,7 +218,6 @@ def main_function():
         for idx, duration in enumerate(durations):
             print(f"恒流充电时长 {idx + 1}: {duration} 秒")
         print(f"总的恒流充电时间: {total_duration} 秒")
-
 
     def calculate_cvct(data):
         """
@@ -416,8 +406,6 @@ def main_function():
         # 返回包含DTW距离的DataFrame
         return pd.DataFrame(dtw_distances, columns=['clique_name', 'DTW_distance'])
 
-    from scipy.stats import wasserstein_distance
-
     def calculate_wasserstein_distance(data, initial_time_cutoff, current_time_cutoff):
         """
         计算每节电池两个时间段内的Wasserstein距离
@@ -509,7 +497,7 @@ def main_function():
         plt.title('Current and Voltage over Time')
         plt.show()
 
-    #数据可视化
+    # 数据可视化
     inner_function_vis()
 
     # 读取CSV文件
@@ -520,8 +508,8 @@ def main_function():
     data_current = data_current.sort_values(by='time')
 
     # 定义阈值
-    voltage_threshold = 0.005 #恒压阈值
-    current_threshold = 0.2  #恒流阈值
+    voltage_threshold = 0.005  # 恒压阈值
+    current_threshold = 0.2  # 恒流阈值
 
     # 计算所有电池的恒压充电时长
     all_voltage_durations = calculate_constant_voltage_duration(data_voltage, voltage_threshold)
@@ -530,15 +518,17 @@ def main_function():
     for battery, durations in all_voltage_durations.items():
         print(f"{battery}, 恒压充电时间（秒）为 {durations}")
 
-    # 计算恒流充电时长
-    constant_current_durations = calculate_constant_current_duration(data_current, current_threshold)
+    # 处理每个分段文件
+    for label in ['First Charge', 'Second Charge', 'Third Charge']:
+        segment_file_path = f'{label}.csv'
+        durations = calculate_constant_current_duration(segment_file_path, current_threshold)
+        total_duration = sum(durations)
 
-    # 输出恒流充电时长结果
-    for idx, duration in enumerate(constant_current_durations):
-        print(f"恒流充电时长 {idx + 1}: {duration} 秒")
-
-    # total_constant_current_duration = sum(constant_current_durations)
-    # print(f"总的恒流充电时间: {total_constant_current_duration} 秒")
+        # 输出结果
+        print(f"\n{label}：")
+        for idx, duration in enumerate(durations):
+            print(f"恒流充电时长 {idx + 1}: {duration} 秒")
+        print(f"总的恒流充电时间: {total_duration} 秒")
 
     # 计算电压变化率平稳时长
     cvct_dict = calculate_cvct(data_voltage)
@@ -571,153 +561,3 @@ def main_function():
 
 # 调用主函数
 main_function()
-
-# Battery: 单体电池电压2V-001电池, Constant Voltage Durations (in seconds): [22499.0, 17733.0, 19.0, 10.0, 35750.0, 20.0, 189.0, 25150.0, 18836.0, 6467.0, 36178.0, 70.0, 690.0, 2693.0, 3440.0, 4523.0, 18342.0, 66220.0]
-# Battery: 单体电池电压2V-002电池, Constant Voltage Durations (in seconds): [22499.0, 17733.0, 19.0, 35760.0, 20.0, 189.0, 25150.0, 18836.0, 6467.0, 36168.0, 70.0, 29728.0, 66220.0]
-# Battery: 单体电池电压2V-003电池, Constant Voltage Durations (in seconds): [22499.0, 17733.0, 19.0, 35770.0, 20.0, 44195.0, 6478.0, 36178.0, 70.0, 6843.0, 22875.0, 66220.0]
-# Battery: 单体电池电压2V-004电池, Constant Voltage Durations (in seconds): [22499.0, 17733.0, 19.0, 35770.0, 20.0, 25349.0, 18836.0, 6467.0, 36178.0, 70.0, 3393.0, 7973.0, 18342.0, 66220.0]
-# Battery: 单体电池电压2V-005电池, Constant Voltage Durations (in seconds): [22499.0, 17733.0, 19.0, 35770.0, 20.0, 25349.0, 18836.0, 6478.0, 36168.0, 70.0, 29728.0, 66220.0]
-# Battery: 单体电池电压2V-006电池, Constant Voltage Durations (in seconds): [22499.0, 17733.0, 19.0, 35770.0, 20.0, 44195.0, 6478.0, 36178.0, 70.0, 29728.0, 66220.0]
-# Battery: 单体电池电压2V-007电池, Constant Voltage Durations (in seconds): [40242.0, 19.0, 35770.0, 20.0, 25349.0, 18836.0, 6478.0, 36168.0, 70.0, 29728.0, 66220.0]
-# Battery: 单体电池电压2V-008电池, Constant Voltage Durations (in seconds): [22499.0, 17733.0, 19.0, 35780.0, 20.0, 25349.0, 25324.0, 36178.0, 29808.0, 66220.0]
-# Battery: 单体电池电压2V-009电池, Constant Voltage Durations (in seconds): [22499.0, 17733.0, 19.0, 35770.0, 20.0, 25349.0, 25324.0, 36168.0, 70.0, 3393.0, 26325.0, 66220.0]
-# Battery: 单体电池电压2V-010电池, Constant Voltage Durations (in seconds): [22499.0, 17733.0, 19.0, 35780.0, 20.0, 25349.0, 25324.0, 36178.0, 29808.0, 66220.0]
-# Battery: 单体电池电压2V-011电池, Constant Voltage Durations (in seconds): [40242.0, 19.0, 35770.0, 20.0, 25349.0, 25324.0, 36178.0, 29808.0, 66220.0]
-# Battery: 单体电池电压2V-012电池, Constant Voltage Durations (in seconds): [40242.0, 19.0, 35770.0, 20.0, 25349.0, 18836.0, 6478.0, 36178.0, 3473.0, 7973.0, 18342.0, 66220.0]
-# Battery: 单体电池电压2V-013电池, Constant Voltage Durations (in seconds): [40242.0, 19.0, 35780.0, 20.0, 44205.0, 6478.0, 36178.0, 3473.0, 26325.0, 66220.0]
-# Battery: 单体电池电压2V-014电池, Constant Voltage Durations (in seconds): [40242.0, 19.0, 35770.0, 20.0, 25359.0, 18836.0, 6478.0, 36178.0, 29808.0, 66220.0]
-# Battery: 单体电池电压2V-015电池, Constant Voltage Durations (in seconds): [40252.0, 19.0, 35760.0, 20.0, 25359.0, 25324.0, 36168.0, 29808.0, 66220.0]
-# Battery: 单体电池电压2V-016电池, Constant Voltage Durations (in seconds): [22499.0, 17743.0, 19.0, 35770.0, 20.0, 25359.0, 25324.0, 36168.0, 29808.0, 66220.0]
-# Battery: 单体电池电压2V-017电池, Constant Voltage Durations (in seconds): [22499.0, 17733.0, 19.0, 35780.0, 20.0, 25359.0, 25324.0, 36178.0, 29808.0, 66220.0]
-# Battery: 单体电池电压2V-018电池, Constant Voltage Durations (in seconds): [22499.0, 17733.0, 19.0, 35770.0, 20.0, 50693.0, 36178.0, 29808.0, 66220.0]
-# Battery: 单体电池电压2V-019电池, Constant Voltage Durations (in seconds): [22499.0, 17772.0, 10.0, 35739.0, 20.0, 25359.0, 25324.0, 36178.0, 29808.0, 66220.0]
-# Battery: 单体电池电压2V-020电池, Constant Voltage Durations (in seconds): [22499.0, 17743.0, 19.0, 35760.0, 10.0, 25359.0, 25324.0, 36168.0, 29808.0, 66220.0]
-# Battery: 单体电池电压2V-021电池, Constant Voltage Durations (in seconds): [22499.0, 17743.0, 19.0, 35760.0, 20.0, 25359.0, 25324.0, 36178.0, 6923.0, 22875.0, 66220.0]
-# Battery: 单体电池电压2V-022电池, Constant Voltage Durations (in seconds): [22499.0, 17743.0, 19.0, 10.0, 35750.0, 20.0, 25359.0, 25324.0, 36168.0, 3473.0, 26325.0, 66220.0]
-# Battery: 单体电池电压2V-023电池, Constant Voltage Durations (in seconds): [22499.0, 17743.0, 19.0, 35770.0, 20.0, 25359.0, 25324.0, 36178.0, 29808.0, 66220.0]
-# Battery: 单体电池电压2V-024电池, Constant Voltage Durations (in seconds): [22499.0, 17743.0, 19.0, 10.0, 35750.0, 20.0, 25359.0, 25324.0, 36178.0, 6923.0, 22875.0, 66220.0]
-# 恒流充电时长 1: 20.0 秒
-# 恒流充电时长 2: 1279.0 秒
-# 恒流充电时长 3: 568.0 秒
-# 恒流充电时长 4: 1219.0 秒
-# 恒流充电时长 5: 797.0 秒
-# 恒流充电时长 6: 506.0 秒
-# 恒流充电时长 7: 939.0 秒
-# 恒流充电时长 8: 652.0 秒
-# 恒流充电时长 9: 1782.0 秒
-# 恒流充电时长 10: 17519.0 秒
-# 恒流充电时长 11: 25325.0 秒
-# 恒流充电时长 12: 50.0 秒
-# 恒流充电时长 13: 691.0 秒
-# 恒流充电时长 14: 900.0 秒
-# 恒流充电时长 15: 1783.0 秒
-# 恒流充电时长 16: 911.0 秒
-# 恒流充电时长 17: 650.0 秒
-# 恒流充电时长 18: 441.0 秒
-# 恒流充电时长 19: 819.0 秒
-# 恒流充电时长 20: 580.0 秒
-# 恒流充电时长 21: 2492.0 秒
-# 恒流充电时长 22: 2020.0 秒
-# 恒流充电时长 23: 18343.0 秒
-# 恒流充电时长 24: 17137.0 秒
-# 恒流充电时长 25: 49062.0 秒
-# 单体电池电压2V-001电池: 恒压充电电压变化率平稳时长 21428.00 秒
-# 单体电池电压2V-002电池: 恒压充电电压变化率平稳时长 22499.00 秒
-# 单体电池电压2V-003电池: 恒压充电电压变化率平稳时长 20103.00 秒
-# 单体电池电压2V-004电池: 恒压充电电压变化率平稳时长 23208.00 秒
-# 单体电池电压2V-005电池: 恒压充电电压变化率平稳时长 16934.00 秒
-# 单体电池电压2V-006电池: 恒压充电电压变化率平稳时长 33662.00 秒
-# 单体电池电压2V-007电池: 恒压充电电压变化率平稳时长 22499.00 秒
-# 单体电池电压2V-008电池: 恒压充电电压变化率平稳时长 17777.00 秒
-# 单体电池电压2V-009电池: 恒压充电电压变化率平稳时长 22315.00 秒
-# 单体电池电压2V-010电池: 恒压充电电压变化率平稳时长 22499.00 秒
-# 单体电池电压2V-011电池: 恒压充电电压变化率平稳时长 24387.00 秒
-# 单体电池电压2V-012电池: 恒压充电电压变化率平稳时长 26385.00 秒
-# 单体电池电压2V-013电池: 恒压充电电压变化率平稳时长 20660.00 秒
-# 单体电池电压2V-014电池: 恒压充电电压变化率平稳时长 33918.00 秒
-# 单体电池电压2V-015电池: 恒压充电电压变化率平稳时长 40242.00 秒
-# 单体电池电压2V-016电池: 恒压充电电压变化率平稳时长 19421.00 秒
-# 单体电池电压2V-017电池: 恒压充电电压变化率平稳时长 23136.00 秒
-# 单体电池电压2V-018电池: 恒压充电电压变化率平稳时长 27711.00 秒
-# 单体电池电压2V-019电池: 恒压充电电压变化率平稳时长 22499.00 秒
-# 单体电池电压2V-020电池: 恒压充电电压变化率平稳时长 22499.00 秒
-# 单体电池电压2V-021电池: 恒压充电电压变化率平稳时长 18237.00 秒
-# 单体电池电压2V-022电池: 恒压充电电压变化率平稳时长 15860.00 秒
-# 单体电池电压2V-023电池: 恒压充电电压变化率平稳时长 25559.00 秒
-# 单体电池电压2V-024电池: 恒压充电电压变化率平稳时长 25894.00 秒
-# 单体电池电压2V-001电池: 最大充电电压变化率 0.008600 V/s
-# 单体电池电压2V-002电池: 最大充电电压变化率 0.007600 V/s
-# 单体电池电压2V-003电池: 最大充电电压变化率 0.006700 V/s
-# 单体电池电压2V-004电池: 最大充电电压变化率 0.007100 V/s
-# 单体电池电压2V-005电池: 最大充电电压变化率 0.007400 V/s
-# 单体电池电压2V-006电池: 最大充电电压变化率 0.007700 V/s
-# 单体电池电压2V-007电池: 最大充电电压变化率 0.007900 V/s
-# 单体电池电压2V-008电池: 最大充电电压变化率 0.007200 V/s
-# 单体电池电压2V-009电池: 最大充电电压变化率 0.007700 V/s
-# 单体电池电压2V-010电池: 最大充电电压变化率 0.007600 V/s
-# 单体电池电压2V-011电池: 最大充电电压变化率 0.007800 V/s
-# 单体电池电压2V-012电池: 最大充电电压变化率 0.009100 V/s
-# 单体电池电压2V-013电池: 最大充电电压变化率 0.007600 V/s
-# 单体电池电压2V-014电池: 最大充电电压变化率 0.007900 V/s
-# 单体电池电压2V-015电池: 最大充电电压变化率 0.008500 V/s
-# 单体电池电压2V-016电池: 最大充电电压变化率 0.008500 V/s
-# 单体电池电压2V-017电池: 最大充电电压变化率 0.008000 V/s
-# 单体电池电压2V-018电池: 最大充电电压变化率 0.008700 V/s
-# 单体电池电压2V-019电池: 最大充电电压变化率 0.008600 V/s
-# 单体电池电压2V-020电池: 最大充电电压变化率 0.008900 V/s
-# 单体电池电压2V-021电池: 最大充电电压变化率 0.009000 V/s
-# 单体电池电压2V-022电池: 最大充电电压变化率 0.009000 V/s
-# 单体电池电压2V-023电池: 最大充电电压变化率 0.008000 V/s
-# 单体电池电压2V-024电池: 最大充电电压变化率 0.009400 V/s
-#        clique_name  DTW_distance
-# 0   单体电池电压2V-001电池    291.360893
-# 1   单体电池电压2V-002电池    272.927781
-# 2   单体电池电压2V-003电池    254.656690
-# 3   单体电池电压2V-004电池    259.752499
-# 4   单体电池电压2V-005电池    261.919290
-# 5   单体电池电压2V-006电池    271.652413
-# 6   单体电池电压2V-007电池    268.627989
-# 7   单体电池电压2V-008电池    257.033780
-# 8   单体电池电压2V-009电池    260.055251
-# 9   单体电池电压2V-010电池    256.990933
-# 10  单体电池电压2V-011电池    262.263512
-# 11  单体电池电压2V-012电池    290.348166
-# 12  单体电池电压2V-013电池    253.643723
-# 13  单体电池电压2V-014电池    255.577748
-# 14  单体电池电压2V-015电池    262.195546
-# 15  单体电池电压2V-016电池    260.445357
-# 16  单体电池电压2V-017电池    260.892049
-# 17  单体电池电压2V-018电池    270.346560
-# 18  单体电池电压2V-019电池    266.429302
-# 19  单体电池电压2V-020电池    268.743638
-# 20  单体电池电压2V-021电池    268.030459
-# 21  单体电池电压2V-022电池    269.192334
-# 22  单体电池电压2V-023电池    260.589392
-# 23  单体电池电压2V-024电池    271.558338
-#        clique_name  Wasserstein_distance
-# 0   单体电池电压2V-001电池              0.095847
-# 1   单体电池电压2V-002电池              0.092427
-# 2   单体电池电压2V-003电池              0.089752
-# 3   单体电池电压2V-004电池              0.089336
-# 4   单体电池电压2V-005电池              0.090359
-# 5   单体电池电压2V-006电池              0.092766
-# 6   单体电池电压2V-007电池              0.093395
-# 7   单体电池电压2V-008电池              0.089415
-# 8   单体电池电压2V-009电池              0.090230
-# 9   单体电池电压2V-010电池              0.089835
-# 10  单体电池电压2V-011电池              0.090720
-# 11  单体电池电压2V-012电池              0.096739
-# 12  单体电池电压2V-013电池              0.088564
-# 13  单体电池电压2V-014电池              0.089338
-# 14  单体电池电压2V-015电池              0.090804
-# 15  单体电池电压2V-016电池              0.089715
-# 16  单体电池电压2V-017电池              0.089926
-# 17  单体电池电压2V-018电池              0.092487
-# 18  单体电池电压2V-019电池              0.090957
-# 19  单体电池电压2V-020电池              0.091230
-# 20  单体电池电压2V-021电池              0.091836
-# 21  单体电池电压2V-022电池              0.091517
-# 22  单体电池电压2V-023电池              0.091876
-# 23  单体电池电压2V-024电池              0.092159
-
-

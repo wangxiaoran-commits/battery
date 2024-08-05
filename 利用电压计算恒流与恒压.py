@@ -54,7 +54,7 @@ for i in range(1, 25):
 
         # 存储第三阶段信息
         stages_dict['Battery'].append(battery_name)
-        stages_dict['Stage'].append('恒压阶段')
+        stages_dict['Stage'].append('恒压2')
         stages_dict['Start_Time'].append(battery_data.loc[steady_rise_start]['time'])
         stages_dict['End_Time'].append(battery_data.loc[steady_rise_end]['time'])
 
@@ -76,7 +76,7 @@ for i in range(1, 25):
 
         # 存储第一阶段信息
         stages_dict['Battery'].append(battery_name)
-        stages_dict['Stage'].append('恒流（快）')
+        stages_dict['Stage'].append('恒流')
         stages_dict['Start_Time'].append(battery_data.loc[first_stage_start]['time'])
         stages_dict['End_Time'].append(battery_data.loc[first_stage_end]['time'])
 
@@ -87,19 +87,19 @@ for i in range(1, 25):
         # 存储第二阶段信息
         if slow_growth_start <= slow_growth_end:
             stages_dict['Battery'].append(battery_name)
-            stages_dict['Stage'].append('恒流（慢）')
+            stages_dict['Stage'].append('恒压1')
             stages_dict['Start_Time'].append(battery_data.loc[slow_growth_start]['time'])
             stages_dict['End_Time'].append(battery_data.loc[slow_growth_end]['time'])
         else:
             # 如果没有满足条件的第二阶段
             stages_dict['Battery'].append(battery_name)
-            stages_dict['Stage'].append('恒流（慢）')
+            stages_dict['Stage'].append('恒流')
             stages_dict['Start_Time'].append(None)
             stages_dict['End_Time'].append(None)
     else:
         # 如果没有找到最大值，则记录该电池没有第三阶段
         stages_dict['Battery'].append(battery_name)
-        stages_dict['Stage'].append('恒压阶段')
+        stages_dict['Stage'].append('恒压2')
         stages_dict['Start_Time'].append(None)
         stages_dict['End_Time'].append(None)
 

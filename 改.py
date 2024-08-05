@@ -4,6 +4,7 @@ import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt
 from scipy.stats import wasserstein_distance
+from datetime import datetime, timedelta
 
 def main_function():
     # 数据前期处理
@@ -72,11 +73,11 @@ def main_function():
                 segmented_data[label] = data[(data['time'] >= start) & (data['time'] <= end)]
         return segmented_data
 
-    # 定义时间分割点
+    # 定义时间分割点（手动设置）
     segments = [
-        (None, datetime.strptime('2024-07-10 11:11', '%Y-%m-%d %H:%M'), 'First Charge'),
-        (datetime.strptime('2024-07-10 21:10', '%Y-%m-%d %H:%M'), datetime.strptime('2024-07-11 11:14', '%Y-%m-%d %H:%M'), 'Second Charge'),
-        (datetime.strptime('2024-07-11 21:09', '%Y-%m-%d %H:%M'), None, 'Third Charge')
+        (None, datetime.strptime('2024-07-10 03:11', '%Y-%m-%d %H:%M'), 'First Charge'),
+        (datetime.strptime('2024-07-10 13:10', '%Y-%m-%d %H:%M'), datetime.strptime('2024-07-11 03:14', '%Y-%m-%d %H:%M'), 'Second Charge'),
+        (datetime.strptime('2024-07-11 13:20', '%Y-%m-%d %H:%M'), None, 'Third Charge')
     ]
 
     # 原始电流数据，要求有‘time’，‘clique_name’,'val','timestamp'列
@@ -94,130 +95,137 @@ def main_function():
         data.to_csv(f'{label}.csv', index=False)
         print(f"Saved {label} data to {label}.csv")
 
-    def calculate_constant_voltage_duration(data, voltage_threshold=0.005):
-        """
-        计算每节电池的恒压充电时间
+    #恒流、恒压充电时长计算（这里主动选取第二次充电进行计算，若要计算其他充电时间的数据，需要手动修改时间分割点）
+    def calculate_charge_stages(voltage_file, current_file):
+        # 读取所有电压数据
+        #voltage_file是电压数据，current_file是电流数据
+        data = pd.read_csv(voltage_file)
+        data['time'] = pd.to_datetime(data['time'])
 
-        参数:
-        data (DataFrame): 包含电压数据的DataFrame，包含 'clique_name' 和 'val' 列
-        voltage_threshold (float): 电压变化率的阈值，小于该阈值的电压视为恒压，阈值默认设置为0.005，在六个特征值函数定义之后的地方也可以更改阈值
+        # 读取电流数据
+        current_data = pd.read_csv(current_file)
+        current_data['time'] = pd.to_datetime(current_data['time'])
 
-        返回:
-        dict: 包含每节电池恒压充电时长的字典，键是电池名称，值是恒压持续时间列表（秒）
-        """
+        # 定义时间分割点（自己设置时间分割点，这里的恒流、恒压计算只支持一段充电区间）
+        current_time_cutoff_voltage = datetime.strptime('2024-07-11 13:20', '%Y-%m-%d %H:%M')
+        current_time_cutoff_current = datetime.strptime('2024-07-11 13:20', '%Y-%m-%d %H:%M')
+        #这里的peak_time_cutoff时间需要根据可视化图表自己选取一个在峰值之后但不会过于远的时间，这个限定是防止峰值取到恒压阶段后电池电压缓慢上升并超过之前峰值的最高值
+        peak_time_cutoff = datetime.strptime('2024-07-12 00:00', '%Y-%m-%d %H:%M')
 
-        def calculate_durations(battery_data):
-            """
-            计算单节电池在恒压充电阶段的持续时间
+        # 过滤出时间大于等于current_time_cutoff的数据
+        filtered_voltage_data = data[data['time'] >= current_time_cutoff_voltage]
+        filtered_current_data = current_data[current_data['time'] >= current_time_cutoff_current]
 
-            参数:
-            battery_data (DataFrame): 单节电池的数据，必须包含 'time' 和 'val' 列
+        # 初始化存储结果的字典
+        stages_dict = {'Battery': [], 'Stage': [], 'Start_Time': [], 'End_Time': []}
 
-            返回:
-            list: 包含单节电池恒压充电时长的列表（秒）。
-            """
-            durations = []
-            start_time = None
-            end_time = None
-
-            # 遍历电池数据，计算电压变化率
-            for i in range(1, len(battery_data)):
-                voltage_diff = abs(battery_data.iloc[i]['val'] - battery_data.iloc[i - 1]['val'])
-
-                # 如果电压变化率小于等于阈值，则视为恒压状态
-                if voltage_diff <= voltage_threshold:
-                    if start_time is None:
-                        start_time = pd.to_datetime(battery_data.iloc[i - 1]['time'])
-                    end_time = pd.to_datetime(battery_data.iloc[i]['time'])
-                else:
-                    if start_time is not None and end_time is not None:
-                        # 计算持续时间并记录
-                        duration = (end_time - start_time).total_seconds()
-                        durations.append(duration)
-                    start_time = None
-                    end_time = None
-
-            # 处理最后一个持续时间段
-            if start_time is not None and end_time is not None:
-                duration = (end_time - start_time).total_seconds()
-                durations.append(duration)
-
-            return durations
-
-        # 存储所有电池的恒压充电时长
-        all_durations = {}
-
-        # 循环处理每节电池
+        # 分析每节电池
         for i in range(1, 25):
             battery_name = f'单体电池电压2V-{i:03d}电池'
-            battery_data = data[data['clique_name'] == battery_name]
-            if battery_data.empty:
-                print(f"No data for {battery_name}")
+            battery_data = filtered_voltage_data[filtered_voltage_data['clique_name'] == battery_name].copy()
+
+            # 找到在peak_time_cutoff之前的电压最大值
+            pre_peak_data = battery_data[battery_data['time'] <= peak_time_cutoff]
+            if not pre_peak_data.empty:
+                max_val = pre_peak_data['val'].max()
+                max_idx = pre_peak_data[pre_peak_data['val'] == max_val].index[0]
+
+                # 第三阶段的起始和结束点
+                steady_rise_start = max_idx
+
+                # 获取第三阶段开始后的电流数据
+                post_steady_rise_current_data = filtered_current_data[
+                    filtered_current_data['time'] >= battery_data.loc[steady_rise_start]['time']]
+
+                # 找到电流小于1.8的第一个时间点，电流若小于1.8则视为不在充电阶段（恒压结束节点），并且小于1.8的结束点在第三节阶段，不会取到恒流阶段中电流小于1.8的点
+                steady_rise_end_time = post_steady_rise_current_data[post_steady_rise_current_data['val'] < 1.8][
+                    'time'].min()
+
+                if pd.notna(steady_rise_end_time):
+                    steady_rise_end = battery_data[battery_data['time'] >= steady_rise_end_time].index[0]
+                else:
+                    steady_rise_end = battery_data.index[-1]
+
+                # 存储第三阶段信息
+                stages_dict['Battery'].append(battery_name)
+                stages_dict['Stage'].append('恒压2')
+                stages_dict['Start_Time'].append(battery_data.loc[steady_rise_start]['time'])
+                stages_dict['End_Time'].append(battery_data.loc[steady_rise_end]['time'])
+
+                # 计算第一阶段，每十五分钟查看电压变化，若电压变化小于0.0025则被算作进入第二阶段（0.0025由图表可视化得来）
+                first_stage_start = battery_data.index[0]
+                first_stage_end = first_stage_start
+
+                #这个循环持续执行，直到first_stage_end（恒流第一阶段）达到或超过steady_rise_start（恒压阶段的开始点）
+                while first_stage_end < steady_rise_start:
+                    #初始化 next_point，它等于当前的 first_stage_end
+                    next_point = first_stage_end
+                    # 找到下一个十五分钟的点
+                    time_check = battery_data.loc[first_stage_end]['time'] + timedelta(minutes=15)
+                    #从first_stage_end 开始到time_check之间的数据点，如果找到超过一个以上的数据点，将 next_point 设置为 future_points 中的最后一个点的索引
+                    future_points = battery_data[(battery_data['time'] >= battery_data.loc[first_stage_end]['time']) & (
+                                battery_data['time'] <= time_check)]
+                    if len(future_points) > 1:
+                        next_point = future_points.index[-1]
+                    #如果 next_point 和 first_stage_end 之间的时间差大于等于15分钟（15 * 60秒），
+                    #如果 next_point 和 first_stage_end 之间的电压变化小于等于0.0025，则认为找到了恒流阶段结束的点，跳出循环
+                    if (battery_data.loc[next_point]['time'] - battery_data.loc[first_stage_end][
+                        'time']).total_seconds() >= 15 * 60:
+                        if abs(battery_data.loc[next_point]['val'] - battery_data.loc[first_stage_end][
+                            'val']) <= 0.0025:
+                            break
+                    #将 first_stage_end 更新为 next_point，然后继续下一个循环
+                    first_stage_end = next_point
+
+                # 存储第一阶段信息
+                stages_dict['Battery'].append(battery_name)
+                stages_dict['Stage'].append('恒流')
+                stages_dict['Start_Time'].append(battery_data.loc[first_stage_start]['time'])
+                stages_dict['End_Time'].append(battery_data.loc[first_stage_end]['time'])
+
+                # 第二阶段的起始和结束点
+                slow_growth_start = first_stage_end + 1
+                slow_growth_end = steady_rise_start - 1
+
+                # 存储第二阶段信息
+                if slow_growth_start <= slow_growth_end:
+                    stages_dict['Battery'].append(battery_name)
+                    stages_dict['Stage'].append('恒压1')
+                    stages_dict['Start_Time'].append(battery_data.loc[slow_growth_start]['time'])
+                    stages_dict['End_Time'].append(battery_data.loc[slow_growth_end]['time'])
+                else:
+                    # 如果没有满足条件的第二阶段
+                    stages_dict['Battery'].append(battery_name)
+                    stages_dict['Stage'].append('恒流')
+                    stages_dict['Start_Time'].append(None)
+                    stages_dict['End_Time'].append(None)
             else:
-                # 计算每节电池的恒压持续时间并记录
-                durations = calculate_durations(battery_data)
-                all_durations[battery_name] = durations
+                # 如果没有找到最大值，则记录该电池没有第三阶段
+                stages_dict['Battery'].append(battery_name)
+                stages_dict['Stage'].append('恒压2')
+                stages_dict['Start_Time'].append(None)
+                stages_dict['End_Time'].append(None)
 
-        return all_durations
+        # 转换为DataFrame
+        stages_df = pd.DataFrame(stages_dict)
+        #展示全部信息
+        pd.set_option('display.max_rows', 500)
+        pd.set_option('display.max_columns', 100)
+        pd.set_option('display.width', 1000)
 
-    # 计算恒流充电时长的函数
-    def calculate_constant_current_duration(segment_file_path, current_threshold=0.1):
-        """
-        计算恒流充电时间
+        return stages_df
 
-        参数:
-        segment_file_path (str): CSV文件路径
-        current_threshold (float): 电流变化率的阈值，小于该阈值的电流变化视为恒流，默认值为0.1，也可以自己设置
-
-        返回:
-        list: 包含恒流充电时长的列表（秒）
-        """
-        # 加载数据
-        data = pd.read_csv(segment_file_path)
-
-        # 确保数据按时间排序
-        data['time'] = pd.to_datetime(data['time'])
-        data = data.sort_values(by='time')
-
-        start_time = None  # 记录恒流阶段的开始时间
-        end_time = None  # 记录恒流阶段的结束时间
-        durations = []  # 存储所有恒流阶段的持续时间
-
-        # 遍历电流数据，计算电流变化率
-        for i in range(1, len(data)):
-            current_diff = abs(data.iloc[i]['val'] - data.iloc[i - 1]['val'])
-
-            # 如果电流变化率小于等于阈值，则视为恒流状态
-            if current_diff <= current_threshold:
-                if start_time is None:
-                    start_time = pd.to_datetime(data.iloc[i - 1]['time'])
-                end_time = pd.to_datetime(data.iloc[i]['time'])
-            else:
-                if start_time is not None and end_time is not None:
-                    # 计算持续时间并记录
-                    duration = (end_time - start_time).total_seconds()
-                    durations.append(duration)
-                start_time = None
-                end_time = None
-
-        # 如果最后一段也是恒流的，需要记录下来
-        if start_time is not None and end_time is not None:
-            duration = (end_time - start_time).total_seconds()
-            durations.append(duration)
-
-        return durations
-
-    # 处理每个分段文件
-    for label in ['First Charge', 'Second Charge', 'Third Charge']:
-        segment_file_path = f'{label}.csv'
-        durations = calculate_constant_current_duration(segment_file_path)
-        total_duration = sum(durations)
-
-        # 输出结果
-        print(f"\n{label}：")
-        for idx, duration in enumerate(durations):
-            print(f"恒流充电时长 {idx + 1}: {duration} 秒")
-        print(f"总的恒流充电时间: {total_duration} 秒")
+    #输入电压与电流数据
+    '''clique_name,timestamp,val,time
+    单体电池电压2V-001电池,1720540802,2.227,2024-07-09 16:00:02
+    单体电池电压2V-001电池,1720540812,2.228,2024-07-09 16:00:12
+     这是电压数据格式 clique_name从001一直到024
+    
+    clique_name,timestamp,val,time
+     充放电电流,1720581055,0.699999,2024-07-10 03:10:55     这是电流数据格式
+    '''
+    stages_df = calculate_charge_stages('电压.csv', '电流.csv')
+    print(stages_df)
 
     def calculate_cvct(data):
         """
@@ -506,29 +514,6 @@ def main_function():
 
     # 确保数据按照时间排序
     data_current = data_current.sort_values(by='time')
-
-    # 定义阈值
-    voltage_threshold = 0.005  # 恒压阈值
-    current_threshold = 0.2  # 恒流阈值
-
-    # 计算所有电池的恒压充电时长
-    all_voltage_durations = calculate_constant_voltage_duration(data_voltage, voltage_threshold)
-
-    # 打印恒压充电时长结果
-    for battery, durations in all_voltage_durations.items():
-        print(f"{battery}, 恒压充电时间（秒）为 {durations}")
-
-    # 处理每个分段文件
-    for label in ['First Charge', 'Second Charge', 'Third Charge']:
-        segment_file_path = f'{label}.csv'
-        durations = calculate_constant_current_duration(segment_file_path, current_threshold)
-        total_duration = sum(durations)
-
-        # 输出结果
-        print(f"\n{label}：")
-        for idx, duration in enumerate(durations):
-            print(f"恒流充电时长 {idx + 1}: {duration} 秒")
-        print(f"总的恒流充电时间: {total_duration} 秒")
 
     # 计算电压变化率平稳时长
     cvct_dict = calculate_cvct(data_voltage)

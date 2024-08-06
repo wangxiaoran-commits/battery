@@ -322,9 +322,9 @@ def main_function():
 
         initial_time_cutoff = filtered_voltage_data['DTW_wasserstein_initial_time_cutoff'].iloc[0]
         current_time_cutoff = filtered_voltage_data['DTW_wasserstein_current_time_cutoff'].iloc[0]
-        #初始电压循环曲线
+        # 初始电压循环曲线
         initial_curve = filtered_voltage_data[filtered_voltage_data['time'] <= initial_time_cutoff]
-        #当前电压循环曲线
+        # 当前电压循环曲线
         current_curve = filtered_voltage_data[filtered_voltage_data['time'] >= current_time_cutoff]
 
         def dtw(A, B):

@@ -306,7 +306,7 @@ def main_function():
 
         return pd.DataFrame(list(max_dv_dt_dict.items()), columns=['Battery', 'Max_dV/dt'])
 
-    def calculate_dtw(initial_curve, current_curve):
+    def calculate_dtw(initial_curve, current_curve, downsample_factor=10):
         start_time = time.time()
 
         def dtw(A, B):
@@ -338,16 +338,34 @@ def main_function():
             current_curve_battery = current_curve[current_curve['clique_name'] == battery_name]['val'].values
 
             if len(initial_curve_battery) > 0 and len(current_curve_battery) > 0:
-                dtw_distance = dtw(initial_curve_battery, current_curve_battery)
-                dtw_distances.append((battery_name, dtw_distance))
+                # 对电压曲线进行降采样
+                initial_curve_battery_downsampled = np.array(initial_curve_battery[::downsample_factor],
+                                                             dtype=np.float64).flatten()
+                current_curve_battery_downsampled = np.array(current_curve_battery[::downsample_factor],
+                                                             dtype=np.float64).flatten()
+
+                # 确保两者长度相同
+                min_length = min(len(initial_curve_battery_downsampled), len(current_curve_battery_downsampled))
+                initial_curve_battery_downsampled = initial_curve_battery_downsampled[:min_length]
+                current_curve_battery_downsampled = current_curve_battery_downsampled[:min_length]
+                if not np.isnan(initial_curve_battery_downsampled).any() and not np.isnan(
+                        current_curve_battery_downsampled).any():
+                    try:
+                        dtw_distance = dtw(initial_curve_battery_downsampled, current_curve_battery_downsampled)
+                        dtw_distances.append((battery_name, dtw_distance))
+                    except Exception as e:
+                        print(f"Error calculating DTW for {battery_name}: {e}")
+                        dtw_distances.append((battery_name, None))
+                else:
+                    print(f"Skipping battery {battery_name} due to NaN values.")
+                    dtw_distances.append((battery_name, None))
             else:
                 dtw_distances.append((battery_name, None))
 
-        end_time = time.time()
-        print(f"calculate_dtw function execution time: {end_time - start_time} seconds")
+            end_time = time.time()
+            print(f"calculate_dtw function execution time: {end_time - start_time} seconds")
 
-        return pd.DataFrame(dtw_distances, columns=['Battery', 'DTW_distance'])
-
+            return pd.DataFrame(dtw_distances, columns=['Battery', 'DTW_distance'])
     def calculate_wasserstein_distance(initial_curve, current_curve):
         start_time = time.time()
 

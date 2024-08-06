@@ -362,10 +362,10 @@ def main_function():
             else:
                 dtw_distances.append((battery_name, None))
 
-            end_time = time.time()
-            print(f"calculate_dtw function execution time: {end_time - start_time} seconds")
+        end_time = time.time()
+        print(f"calculate_dtw function execution time: {end_time - start_time} seconds")
 
-            return pd.DataFrame(dtw_distances, columns=['Battery', 'DTW_distance'])
+        return pd.DataFrame(dtw_distances, columns=['Battery', 'DTW_distance'])
     def calculate_wasserstein_distance(initial_curve, current_curve):
         start_time = time.time()
 

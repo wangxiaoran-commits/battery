@@ -56,38 +56,78 @@ def main_function():
     1.8 ：恒压结束时的电流阈值，当电流小于1.8则恒压结束
     '''
 
-    def segment_current_data(data, segments):
-        segmented_data = {}
-        for start, end, label in segments:
-            if start is None:
-                segmented_data[label] = data[data['time'] <= end]
-            elif end is None:
-                segmented_data[label] = data[data['time'] >= start]
-            else:
-                segmented_data[label] = data[(data['time'] >= start) & (data['time'] <= end)]
-        return segmented_data
+
+    '''
+    需要注意的是，实验数据是第二次充电数据，电压被分割成两段，第二次充电数据需要选择被分割后的第二段电压数据
+    但是电流被分割成三段，第二次充电的电流数据是third charge这个电流数据，而非second charge
+    由于first charge里面只有一条数据，可以忽略，
+    second charge中的电流数据对应的是第一段电压数据，两者对应的是第一次充电
+    '''
+
 
     def process_data(voltage_file, current_file, start_time_str, duration_hours):
+        """
+        处理电压和电流数据，并根据指定的充电阶段划分电流数据。
+
+        参数:
+        voltage_file (str): 包含电压数据的CSV文件路径
+        current_file (str): 包含电流数据的CSV文件路径
+        start_time_str (str): 充电阶段的开始时间字符串，格式为 'YYYY-MM-DD HH:MM'
+        duration_hours (int): 充电阶段的持续时间（小时）
+
+        返回:
+        tuple: 包含处理后的电压数据、初始曲线、当前曲线、三个充电阶段的电流数据的元组
+        """
+
+        def segment_current_data(data, segments):
+            """
+            将电流数据划分为不同的充电阶段,这里划分成了三段电流的df数据，
+            与选取电压数据相匹配的是third charge的电流数据，也可以根据实际情况自行选择想要分割的段数
+
+            参数:
+            data (DataFrame): 包含电流数据的DataFrame
+            segments (list): 每个充电阶段的时间段和标签的列表
+
+            返回:
+            dict: 每个充电阶段的数据字典，键为标签，值为相应的DataFrame
+            """
+            segmented_data = {}
+            for start, end, label in segments:
+                if start is None:
+                    segmented_data[label] = data[data['time'] <= end]
+                elif end is None:
+                    segmented_data[label] = data[data['time'] >= start]
+                else:
+                    segmented_data[label] = data[(data['time'] >= start) & (data['time'] <= end)]
+            return segmented_data
+
+        # 读取电压数据
         data = pd.read_csv(voltage_file)
         data['time'] = pd.to_datetime(data['time'])
 
+        # 读取电流数据
         current_data = pd.read_csv(current_file)
         current_data['time'] = pd.to_datetime(current_data['time'])
 
+        # 计算充电阶段的开始和结束时间
         start_time = datetime.strptime(start_time_str, '%Y-%m-%d %H:%M')
         end_time = start_time + timedelta(hours=duration_hours)
         peak_time_cutoff = start_time + timedelta(hours=11)
 
+        # 过滤出指定时间段内的电压数据
         filtered_voltage_data = data[(data['time'] >= start_time) & (data['time'] <= end_time)].copy()
         filtered_voltage_data.loc[:, 'peak_time_cutoff'] = peak_time_cutoff
 
+        # 定义初始曲线和当前曲线的时间节点
         initial_time_cutoff = datetime.strptime('2024-07-10 13:09', '%Y-%m-%d %H:%M')
         current_time_cutoff = datetime.strptime('2024-07-11 13:20', '%Y-%m-%d %H:%M')
 
+        # 提取初始曲线和当前曲线的数据
         initial_curve = data[(data['time'] >= initial_time_cutoff) & (
                     data['time'] <= datetime.strptime('2024-07-11 11:14', '%Y-%m-%d %H:%M'))]
         current_curve = data[data['time'] >= current_time_cutoff]
 
+        # 定义充电阶段的时间段和标签，这里是三次充电的电流
         segments = [
             (None, datetime.strptime('2024-07-10 03:11', '%Y-%m-%d %H:%M'), 'First Charge'),
             (datetime.strptime('2024-07-10 13:10', '%Y-%m-%d %H:%M'),
@@ -95,66 +135,89 @@ def main_function():
             (datetime.strptime('2024-07-11 13:20', '%Y-%m-%d %H:%M'), None, 'Third Charge')
         ]
 
+        # 划分电流数据为三个充电阶段
         segmented_current_data = segment_current_data(current_data, segments)
-        # 分次保存电流数据
-        for label, data in segmented_current_data.items():
-            data.to_csv(f'{label}.csv', index=False)
-            print(f"Saved {label} data to {label}.csv")
 
+        # 提取三个充电阶段的数据
         first_charge_df = segmented_current_data['First Charge']
         second_charge_df = segmented_current_data['Second Charge']
+        third_charge_df = segmented_current_data['Third Charge']
 
-        return filtered_voltage_data, initial_curve, current_curve, first_charge_df, second_charge_df
+        return filtered_voltage_data, initial_curve, current_curve, first_charge_df, second_charge_df, third_charge_df
 
+    # 设置充电阶段的开始时间和持续时间，这里选择了第二次充电，从2024-07-11 13:20开始，持续27小时
     start_time_str = '2024-07-11 13:20'
     duration_hours = 27
-    filtered_voltage_data, initial_curve, current_curve, first_charge_df, second_charge_df = process_data('电压.csv',
-                                                                                                          '电流.csv',
-                                                                                                          start_time_str,
-                                                                                                          duration_hours)
+
+    # 调用process_data函数处理数据
+    filtered_voltage_data, initial_curve, current_curve, first_charge_df, second_charge_df, third_charge_df = process_data(
+        '电压.csv', '电流.csv', start_time_str, duration_hours)
+
     '''
     计算恒压与恒流充电时长
     '''
 
-    def calculate_charge_stages(filtered_voltage_data, current_file):
+    def calculate_charge_stages(filtered_voltage_data, third_charge_df):
+        """
+        计算每个电池的恒流和恒压充电阶段的起始和结束时间。
+
+        参数:
+        filtered_voltage_data (DataFrame): 包含电压数据的DataFrame，必须包含以下列:
+            - 'time': 时间戳
+            - 'clique_name': 电池名称
+            - 'val': 电压值
+            - 'peak_time_cutoff': 峰值时间的截止点
+        third_charge_df (DataFrame): 包含第三次充电阶段的电流数据的DataFrame，必须包含以下列:
+            - 'time': 时间戳
+            - 'val': 电流值
+
+        返回:
+        DataFrame: 包含每个电池的充电阶段（恒流、恒压1、恒压2）的起始和结束时间的DataFrame，列为:
+            - 'Battery': 电池名称
+            - 'Stage': 充电阶段名称（恒流、恒压1、恒压2）
+            - 'Start_Time': 充电阶段的开始时间
+            - 'End_Time': 充电阶段的结束时间
+        """
+
         data = filtered_voltage_data
-        current_data = pd.read_csv(current_file)
-        current_data['time'] = pd.to_datetime(current_data['time'])
+        current_data = third_charge_df
 
         stages_dict = {'Battery': [], 'Stage': [], 'Start_Time': [], 'End_Time': []}
 
         for i in range(1, 25):
-            battery_name = f'单体电池电压2V-{i:03d}电池'
-            battery_data = data[data['clique_name'] == battery_name].copy()
-            peak_time_cutoff = battery_data['peak_time_cutoff'].iloc[0]
+            battery_name = f'单体电池电压2V-{i:03d}电池'  # 生成电池名称
+            battery_data = data[data['clique_name'] == battery_name].copy()  # 提取当前电池的数据
+            peak_time_cutoff = battery_data['peak_time_cutoff'].iloc[0]  # 获取峰值时间截止点
 
-            pre_peak_data = battery_data[battery_data['time'] <= peak_time_cutoff]
+            pre_peak_data = battery_data[battery_data['time'] <= peak_time_cutoff]  # 获取峰值时间之前的数据
             if not pre_peak_data.empty:
-                max_val = pre_peak_data['val'].max()
-                max_idx = pre_peak_data[pre_peak_data['val'] == max_val].index[0]
+                max_val = pre_peak_data['val'].max()  # 获取峰值时间之前的最大电压值
+                max_idx = pre_peak_data[pre_peak_data['val'] == max_val].index[0]  # 获取最大电压值对应的索引
 
-                steady_rise_start = max_idx
+                steady_rise_start = max_idx  # 恒压阶段2的开始时间索引
                 post_steady_rise_current_data = current_data[
-                    current_data['time'] >= battery_data.loc[steady_rise_start]['time']]
+                    current_data['time'] >= battery_data.loc[steady_rise_start]['time']]  # 获取恒压阶段2的电流数据
                 steady_rise_end_time = post_steady_rise_current_data[post_steady_rise_current_data['val'] < 1.8][
-                    'time'].min()
+                    'time'].min()  # 获取恒压阶段2的结束时间
 
                 if pd.notna(steady_rise_end_time):
-                    steady_rise_end = battery_data[battery_data['time'] >= steady_rise_end_time].index[0]
+                    steady_rise_end = battery_data[battery_data['time'] >= steady_rise_end_time].index[
+                        0]  # 恒压阶段2的结束时间索引
                 else:
-                    steady_rise_end = battery_data.index[-1]
+                    steady_rise_end = battery_data.index[-1]  # 如果没有找到结束时间，则取最后一个索引
 
                 stages_dict['Battery'].append(battery_name)
                 stages_dict['Stage'].append('恒压2')
                 stages_dict['Start_Time'].append(battery_data.loc[steady_rise_start]['time'])
                 stages_dict['End_Time'].append(battery_data.loc[steady_rise_end]['time'])
 
-                first_stage_start = battery_data.index[0]
-                first_stage_end = first_stage_start
+                first_stage_start = battery_data.index[0]  # 恒流阶段的开始时间索引
+                first_stage_end = first_stage_start  # 初始化恒流阶段的结束时间索引
 
+                # 确定恒流阶段的结束时间
                 while first_stage_end < steady_rise_start:
                     next_point = first_stage_end
-                    time_check = battery_data.loc[first_stage_end]['time'] + timedelta(minutes=15)
+                    time_check = battery_data.loc[first_stage_end]['time'] + timedelta(minutes=15)  # 设置检查时间间隔为15分钟
                     future_points = battery_data[(battery_data['time'] >= battery_data.loc[first_stage_end]['time']) & (
                                 battery_data['time'] <= time_check)]
                     if len(future_points) > 1:
@@ -171,8 +234,8 @@ def main_function():
                 stages_dict['Start_Time'].append(battery_data.loc[first_stage_start]['time'])
                 stages_dict['End_Time'].append(battery_data.loc[first_stage_end]['time'])
 
-                slow_growth_start = first_stage_end + 1
-                slow_growth_end = steady_rise_start - 1
+                slow_growth_start = first_stage_end + 1  # 恒压阶段1的开始时间索引
+                slow_growth_end = steady_rise_start - 1  # 恒压阶段1的结束时间索引
 
                 if slow_growth_start <= slow_growth_end:
                     stages_dict['Battery'].append(battery_name)
@@ -197,8 +260,8 @@ def main_function():
 
         return stages_df
 
-    stages_df = calculate_charge_stages(filtered_voltage_data, 'Third Charge.csv')
-    print(stages_df)
+
+
     """
     计算每节电池在恒压充电阶段的电压变化率平稳时长（CVCT）
 
@@ -307,35 +370,52 @@ def main_function():
         return pd.DataFrame(list(max_dv_dt_dict.items()), columns=['Battery', 'Max_dV/dt'])
 
     def calculate_dtw(initial_curve, current_curve, downsample_factor=10):
-        start_time = time.time()
+        start_time = time.time()  # 记录函数开始执行的时间
 
         def dtw(A, B):
+            """
+            计算两个序列 A 和 B 之间的动态时间规整（DTW）距离。
+
+            参数:
+            A, B: 待比较的两个序列
+
+            返回:
+            V_DTW: 两个序列之间的 DTW 距离
+            """
             n, m = len(A), len(B)
-            M = np.zeros((n, m))
+            M = np.zeros((n, m))  # 初始化一个 n x m 的矩阵，用于存储序列 A 和 B 之间的距离
 
             for i in range(n):
                 for j in range(m):
-                    M[i, j] = (A[i] - B[j]) ** 2
+                    M[i, j] = (A[i] - B[j]) ** 2  # 计算 A[i] 和 B[j] 之间的欧氏距离
 
-            r = np.zeros((n, m))
-            r[0, 0] = M[0, 0]
+            r = np.zeros((n, m))  # 初始化一个 n x m 的累积距离矩阵
+            r[0, 0] = M[0, 0]  # 累积距离矩阵的起点
 
+            # 填充累积距离矩阵的第一列
             for i in range(1, n):
                 r[i, 0] = M[i, 0] + r[i - 1, 0]
+
+            # 填充累积距离矩阵的第一行
             for j in range(1, m):
                 r[0, j] = M[0, j] + r[0, j - 1]
+
+            # 填充累积距离矩阵的其余部分
             for i in range(1, n):
                 for j in range(1, m):
                     r[i, j] = M[i, j] + min(r[i - 1, j - 1], r[i, j - 1], r[i - 1, j])
 
-            V_DTW = r[n - 1, m - 1]
+            V_DTW = r[n - 1, m - 1]  # 返回累积距离矩阵的右下角值，即 DTW 距离
             return V_DTW
 
-        dtw_distances = []
+        dtw_distances = []  # 初始化一个列表，用于存储每个电池的 DTW 距离
+
         for i in range(1, 25):
-            battery_name = f'单体电池电压2V-{i:03d}电池'
-            initial_curve_battery = initial_curve[initial_curve['clique_name'] == battery_name]['val'].values
-            current_curve_battery = current_curve[current_curve['clique_name'] == battery_name]['val'].values
+            battery_name = f'单体电池电压2V-{i:03d}电池'  # 生成电池名称
+            initial_curve_battery = initial_curve[initial_curve['clique_name'] == battery_name][
+                'val'].values  # 提取初始曲线数据
+            current_curve_battery = current_curve[current_curve['clique_name'] == battery_name][
+                'val'].values  # 提取当前曲线数据
 
             if len(initial_curve_battery) > 0 and len(current_curve_battery) > 0:
                 # 对电压曲线进行降采样
@@ -348,24 +428,27 @@ def main_function():
                 min_length = min(len(initial_curve_battery_downsampled), len(current_curve_battery_downsampled))
                 initial_curve_battery_downsampled = initial_curve_battery_downsampled[:min_length]
                 current_curve_battery_downsampled = current_curve_battery_downsampled[:min_length]
+
                 if not np.isnan(initial_curve_battery_downsampled).any() and not np.isnan(
                         current_curve_battery_downsampled).any():
                     try:
-                        dtw_distance = dtw(initial_curve_battery_downsampled, current_curve_battery_downsampled)
-                        dtw_distances.append((battery_name, dtw_distance))
+                        dtw_distance = dtw(initial_curve_battery_downsampled,
+                                           current_curve_battery_downsampled)  # 计算 DTW 距离
+                        dtw_distances.append((battery_name, dtw_distance))  # 添加电池名称和 DTW 距离到结果列表中
                     except Exception as e:
-                        print(f"Error calculating DTW for {battery_name}: {e}")
-                        dtw_distances.append((battery_name, None))
+                        print(f"Error calculating DTW for {battery_name}: {e}")  # 处理异常
+                        dtw_distances.append((battery_name, None))  # 如果出现异常，添加电池名称和 None 到结果列表中
                 else:
-                    print(f"Skipping battery {battery_name} due to NaN values.")
-                    dtw_distances.append((battery_name, None))
+                    print(f"Skipping battery {battery_name} due to NaN values.")  # 如果数据中存在 NaN 值，跳过该电池
+                    dtw_distances.append((battery_name, None))  # 添加电池名称和 None 到结果列表中
             else:
-                dtw_distances.append((battery_name, None))
+                dtw_distances.append((battery_name, None))  # 如果没有足够的数据，添加电池名称和 None 到结果列表中
 
-        end_time = time.time()
-        print(f"calculate_dtw function execution time: {end_time - start_time} seconds")
+        end_time = time.time()  # 记录函数结束执行的时间
+        print(f"calculate_dtw function execution time: {end_time - start_time} seconds")  # 打印函数执行时间
 
-        return pd.DataFrame(dtw_distances, columns=['Battery', 'DTW_distance'])
+        return pd.DataFrame(dtw_distances, columns=['Battery', 'DTW_distance'])  # 返回包含电池名称和 DTW 距离的 DataFrame
+
     def calculate_wasserstein_distance(initial_curve, current_curve):
         start_time = time.time()
 
@@ -427,6 +510,9 @@ def main_function():
 
     inner_function_vis()
 
+    stages_df = calculate_charge_stages(filtered_voltage_data, third_charge_df)
+
+
     cvct_df = calculate_cvct(filtered_voltage_data)
 
     max_dv_dt_df = calculate_max_dv_dt(filtered_voltage_data)
@@ -435,11 +521,16 @@ def main_function():
 
     wasserstein_distances_df = calculate_wasserstein_distance(initial_curve, current_curve)
 
+
     combined_df = pd.merge(cvct_df, max_dv_dt_df, on='Battery')
     combined_df = pd.merge(combined_df, dtw_distances_df, on='Battery')
     combined_df = pd.merge(combined_df, wasserstein_distances_df, on='Battery')
+    combined_df = pd.merge(combined_df, stages_df, on='Battery')
 
     print(combined_df)
+
+
+
 
 
 main_function()

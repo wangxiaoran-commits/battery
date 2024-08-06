@@ -216,7 +216,7 @@ def main_function():
     4. 计算平稳区域的持续时间，并找出最长的平稳时间段。
     5. 返回一个包含每节电池名称及其CVCT值的DataFrame。
     """
-    def calculate_cvct(data):
+    def calculate_cvct(filtered_voltage_data):
         batteries = [f'单体电池电压2V-{i:03d}电池' for i in range(1, 25)]
         cvct_dict = {}
 
@@ -256,7 +256,7 @@ def main_function():
 
         return pd.DataFrame(list(cvct_dict.items()), columns=['Battery', 'CVCT'])
 
-    def calculate_max_dv_dt(data):
+    def calculate_max_dv_dt(filtered_voltage_data):
         """
            计算每节电池在恒压充电阶段的最大电压变化率（dV/dt）。
 

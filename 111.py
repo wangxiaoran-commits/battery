@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import wasserstein_distance
 import time
 
+
 def main_function():
     # 数据前期处理
     main_file_path = r"C:\Users\amber\Desktop\特征蓄电池吃\battery_0710-0712.csv"
@@ -18,39 +19,35 @@ def main_function():
         def process_chunk(chunk):
             chunk['time'] = pd.to_datetime(chunk['timestamp'], unit='s')
             voltage_data = chunk[chunk['clique_name'].str.contains('单体电池电压2V-')]
-            internal_resistance_data = chunk[chunk['clique_name'].str.contains('单体电池电压2V内阻-')]
             current_data = chunk[chunk['clique_name'].str.contains('充放电电流')]
-            return voltage_data, internal_resistance_data, current_data
+            return voltage_data, current_data
 
         voltage_data_total = pd.DataFrame()
-        internal_resistance_data_total = pd.DataFrame()
         current_data_total = pd.DataFrame()
 
         chunk_size = 100000
         for chunk in pd.read_csv(main_file_path, chunksize=chunk_size):
-            voltage_data_chunk, internal_resistance_data_chunk, current_data_chunk = process_chunk(chunk)
+            voltage_data_chunk, current_data_chunk = process_chunk(chunk)
             voltage_data_total = pd.concat([voltage_data_total, voltage_data_chunk], ignore_index=True)
-            internal_resistance_data_total = pd.concat([internal_resistance_data_total, internal_resistance_data_chunk], ignore_index=True)
             current_data_total = pd.concat([current_data_total, current_data_chunk], ignore_index=True)
-
+        # 读取全部的电压与电流数据
         voltage_data_total.to_csv('电压.csv', index=False)
-        internal_resistance_data_total.to_csv('电阻.csv', index=False)
         current_data_total.to_csv('电流.csv', index=False)
     '''
-        电压数据处理：
-        start_time_str设置想要计算的充电阶段开始时间，duration_hours是本次充电时长
-        voltage_file放入已经读取的电压数据'电压.csv'   current_file是'电流.csv'
-        peak_time_cutoff限定了快速增长时最大值的选取，是在开始充电后的11小时（利用可视化选取的数据）
-        避免峰值取到恒压状态下电流平稳上升到达的最大值，而是取到快速增长情况下的最大值
-        filtered_voltage_data取到start_time_str开始持续duration_hours时长的电压数据
-        后面处理电流之后，给电流分为First Charge ,Second Charge和Third Charge
-        计算恒流充电时长和恒压充电时长用到了’filtered_voltage_data’和‘Third Charge‘数据
+    电压数据处理：
+    start_time_str设置想要计算的充电阶段开始时间，duration_hours是本次充电时长
+    voltage_file放入已经读取的电压数据'电压.csv'   current_file是'电流.csv'
+    peak_time_cutoff限定了快速增长时最大值的选取，是在开始充电后的11小时（利用可视化选取的数据）
+    避免峰值取到恒压状态下电流平稳上升到达的最大值，而是取到快速增长情况下的最大值
+    filtered_voltage_data取到start_time_str开始持续duration_hours时长的电压数据
+    后面处理电流之后，给电流分为First Charge ,Second Charge和Third Charge
+    计算恒流充电时长和恒压充电时长用到了’filtered_voltage_data’和‘Third Charge‘数据
 
-        并存储peak_time_cutoff，DTW_wasserstein_initial_time_cutoff，DTW_wasserstein_current_time_cutoff'三个时间点
-        DTW_wasserstein_initial_time_cutoff设置DTW和wasserstein两次充电循环第一个时间节点，在这个节点之前的数据算作初循环充电曲线
-        DTW_wasserstein_current_time_cutoff设置第二个时间节点，在这个节点之后算作当前循环充电曲线
-        DTW函数和wasserstein函数可共享这两个电压数据
-        '''
+    并存储peak_time_cutoff，DTW_wasserstein_initial_time_cutoff，DTW_wasserstein_current_time_cutoff'三个时间点
+    DTW_wasserstein_initial_time_cutoff设置DTW和wasserstein两次充电循环第一个时间节点，在这个节点之前的数据算作初循环充电曲线
+    DTW_wasserstein_current_time_cutoff设置第二个时间节点，在这个节点之后算作当前循环充电曲线
+    DTW函数和wasserstein函数可共享这两个电压数据
+    '''
     '''
     恒压与恒流的一些阈值：
     0.0025 根据图标可视化选取的阈值，如果每15分钟变化小于0.0025那么从恒流进入恒压阶段
@@ -58,6 +55,17 @@ def main_function():
     peak_time_cutoff限定了快速增长时最大值的选取范围，是在开始充电后的11小时（利用可视化选取的数据），避免取到恒压阶段2的最大值
     1.8 ：恒压结束时的电流阈值，当电流小于1.8则恒压结束
     '''
+
+    def segment_current_data(data, segments):
+        segmented_data = {}
+        for start, end, label in segments:
+            if start is None:
+                segmented_data[label] = data[data['time'] <= end]
+            elif end is None:
+                segmented_data[label] = data[data['time'] >= start]
+            else:
+                segmented_data[label] = data[(data['time'] >= start) & (data['time'] <= end)]
+        return segmented_data
 
     def process_data(voltage_file, current_file, start_time_str, duration_hours):
         data = pd.read_csv(voltage_file)
@@ -72,45 +80,46 @@ def main_function():
 
         filtered_voltage_data = data[(data['time'] >= start_time) & (data['time'] <= end_time)].copy()
         filtered_voltage_data.loc[:, 'peak_time_cutoff'] = peak_time_cutoff
-        filtered_voltage_data.loc[:, 'DTW_wasserstein_initial_time_cutoff'] = datetime.strptime('2024-07-11 03:15',
-                                                                                                '%Y-%m-%d %H:%M')
-        filtered_voltage_data.loc[:, 'DTW_wasserstein_current_time_cutoff'] = datetime.strptime('2024-07-11 13:20',
-                                                                                                '%Y-%m-%d %H:%M')
 
-        initial_curve = filtered_voltage_data[
-            filtered_voltage_data['time'] <= filtered_voltage_data['DTW_wasserstein_initial_time_cutoff'].iloc[0]]
-        current_curve = filtered_voltage_data[
-            filtered_voltage_data['time'] >= filtered_voltage_data['DTW_wasserstein_current_time_cutoff'].iloc[0]]
+        initial_time_cutoff = datetime.strptime('2024-07-10 13:09', '%Y-%m-%d %H:%M')
+        current_time_cutoff = datetime.strptime('2024-07-11 13:20', '%Y-%m-%d %H:%M')
+
+        initial_curve = data[(data['time'] >= initial_time_cutoff) & (
+                    data['time'] <= datetime.strptime('2024-07-11 11:14', '%Y-%m-%d %H:%M'))]
+        current_curve = data[data['time'] >= current_time_cutoff]
 
         segments = [
-            (None, datetime.strptime('2024-07-11 13:20', '%Y-%m-%d %H:%M'), 'First Charge'),
-            (datetime.strptime('2024-07-11 13:20', '%Y-%m-%d %H:%M'), None, 'Second Charge')
+            (None, datetime.strptime('2024-07-10 03:11', '%Y-%m-%d %H:%M'), 'First Charge'),
+            (datetime.strptime('2024-07-10 13:10', '%Y-%m-%d %H:%M'),
+             datetime.strptime('2024-07-11 03:14', '%Y-%m-%d %H:%M'), 'Second Charge'),
+            (datetime.strptime('2024-07-11 13:20', '%Y-%m-%d %H:%M'), None, 'Third Charge')
         ]
 
-        current_data = current_data.sort_values(by='time')
-        segmented_current_data = {}
-
-        for start, end, label in segments:
-            if start is None:
-                segmented_current_data[label] = current_data[current_data['time'] <= end]
-            elif end is None:
-                segmented_current_data[label] = current_data[current_data['time'] >= start]
+        segmented_current_data = segment_current_data(current_data, segments)
+        # 分次保存电流数据
+        for label, data in segmented_current_data.items():
+            data.to_csv(f'{label}.csv', index=False)
+            print(f"Saved {label} data to {label}.csv")
 
         first_charge_df = segmented_current_data['First Charge']
         second_charge_df = segmented_current_data['Second Charge']
 
-        filtered_voltage_data.to_csv('filtered_voltage_data.csv', index=False)
-        print("Filtered voltage data saved to 'filtered_voltage_data.csv'")
+        return filtered_voltage_data, initial_curve, current_curve, first_charge_df, second_charge_df
 
-        return filtered_voltage_data, first_charge_df, second_charge_df, initial_curve, current_curve
+    start_time_str = '2024-07-11 13:20'
+    duration_hours = 27
+    filtered_voltage_data, initial_curve, current_curve, first_charge_df, second_charge_df = process_data('电压.csv',
+                                                                                                          '电流.csv',
+                                                                                                          start_time_str,
+                                                                                                          duration_hours)
+    '''
+    计算恒压与恒流充电时长
+    '''
 
-    '''
-        计算恒压与恒流充电时长
-    '''
-    def calculate_charge_stages(filtered_voltage_data, current_df):
-        start_time = time.time()
+    def calculate_charge_stages(filtered_voltage_data, current_file):
         data = filtered_voltage_data
-        current_data = current_df
+        current_data = pd.read_csv(current_file)
+        current_data['time'] = pd.to_datetime(current_data['time'])
 
         stages_dict = {'Battery': [], 'Stage': [], 'Start_Time': [], 'End_Time': []}
 
@@ -125,8 +134,10 @@ def main_function():
                 max_idx = pre_peak_data[pre_peak_data['val'] == max_val].index[0]
 
                 steady_rise_start = max_idx
-                post_steady_rise_current_data = current_data[current_data['time'] >= battery_data.loc[steady_rise_start]['time']]
-                steady_rise_end_time = post_steady_rise_current_data[post_steady_rise_current_data['val'] < 1.8]['time'].min()
+                post_steady_rise_current_data = current_data[
+                    current_data['time'] >= battery_data.loc[steady_rise_start]['time']]
+                steady_rise_end_time = post_steady_rise_current_data[post_steady_rise_current_data['val'] < 1.8][
+                    'time'].min()
 
                 if pd.notna(steady_rise_end_time):
                     steady_rise_end = battery_data[battery_data['time'] >= steady_rise_end_time].index[0]
@@ -144,11 +155,14 @@ def main_function():
                 while first_stage_end < steady_rise_start:
                     next_point = first_stage_end
                     time_check = battery_data.loc[first_stage_end]['time'] + timedelta(minutes=15)
-                    future_points = battery_data[(battery_data['time'] >= battery_data.loc[first_stage_end]['time']) & (battery_data['time'] <= time_check)]
+                    future_points = battery_data[(battery_data['time'] >= battery_data.loc[first_stage_end]['time']) & (
+                                battery_data['time'] <= time_check)]
                     if len(future_points) > 1:
                         next_point = future_points.index[-1]
-                    if (battery_data.loc[next_point]['time'] - battery_data.loc[first_stage_end]['time']).total_seconds() >= 15 * 60:
-                        if abs(battery_data.loc[next_point]['val'] - battery_data.loc[first_stage_end]['val']) <= 0.0025:
+                    if (battery_data.loc[next_point]['time'] - battery_data.loc[first_stage_end][
+                        'time']).total_seconds() >= 15 * 60:
+                        if abs(battery_data.loc[next_point]['val'] - battery_data.loc[first_stage_end][
+                            'val']) <= 0.0025:
                             break
                     first_stage_end = next_point
 
@@ -180,45 +194,35 @@ def main_function():
         pd.set_option('display.max_rows', 500)
         pd.set_option('display.max_columns', 100)
         pd.set_option('display.width', 1000)
-        end_time = time.time()
-        print(f"Time taken for calculate_charge_stages: {end_time - start_time:.2f} seconds")
+
         return stages_df
-    '''
-    调用处理电流和电压的函数，输出恒流、恒压充电时长
-    '''
-    start_time_str = '2024-07-11 13:20'
-    duration_hours = 27
-    filtered_voltage_data, first_charge_df, second_charge_df = process_data('电压.csv', '电流.csv', start_time_str,
-                                                                            duration_hours)
 
-    stages_df = calculate_charge_stages(filtered_voltage_data, second_charge_df)
+    stages_df = calculate_charge_stages(filtered_voltage_data, 'Third Charge.csv')
     print(stages_df)
+    """
+    计算每节电池在恒压充电阶段的电压变化率平稳时长（CVCT）
 
+    参数:
+    data (DataFrame): 包含电压数据的DataFrame，必须包含以下列:
+        - 'timestamp': 时间戳
+        - 'clique_name': 电池名称
+        - 'val': 电压值
+
+    返回:
+    DataFrame: 包含每节电池CVCT值的DataFrame，列为:
+        - 'Battery': 电池名称
+        - 'CVCT': 电压变化率平稳时长（秒）
+
+    详细说明:
+    1. 遍历每节电池的数据，提取其时间戳和电压值。
+    2. 计算时间差和电压差，以获得电压变化率（dV/dt）。
+    3. 确定电压变化率在平稳区域（-0.0001 <= dV/dt <= 0.0002）内的时间段。
+    4. 计算平稳区域的持续时间，并找出最长的平稳时间段。
+    5. 返回一个包含每节电池名称及其CVCT值的DataFrame。
+    """
 
     def calculate_cvct(filtered_voltage_data):
-        """
-            计算每节电池在恒压充电阶段的电压变化率平稳时长（CVCT）
-
-            参数:
-            data (DataFrame): 包含电压数据的DataFrame，必须包含以下列:
-                - 'timestamp': 时间戳
-                - 'clique_name': 电池名称
-                - 'val': 电压值
-
-            返回:
-            DataFrame: 包含每节电池CVCT值的DataFrame，列为:
-                - 'Battery': 电池名称
-                - 'CVCT': 电压变化率平稳时长（秒）
-
-            详细说明:
-            1. 遍历每节电池的数据，提取其时间戳和电压值。
-            2. 计算时间差和电压差，以获得电压变化率（dV/dt）。
-            3. 确定电压变化率在平稳区域（-0.0001 <= dV/dt <= 0.0002）内的时间段。
-            4. 计算平稳区域的持续时间，并找出最长的平稳时间段。
-            5. 返回一个包含每节电池名称及其CVCT值的DataFrame。
-            """
         start_time = time.time()
-
         batteries = [f'单体电池电压2V-{i:03d}电池' for i in range(1, 25)]
         cvct_dict = {}
 
@@ -250,40 +254,37 @@ def main_function():
                 if stable_durations:
                     cvct = max(stable_durations)
                 else:
-                    cvct = np.nan # 如果没有平稳区域，返回NaN
+                    cvct = np.nan  # 如果没有平稳区域，返回NaN
             else:
-                cvct = np.nan # 如果数据点不足，返回NaN
+                cvct = np.nan  # 如果数据点不足，返回NaN
 
             cvct_dict[battery] = cvct
-
-        cvct_df = pd.DataFrame(list(cvct_dict.items()), columns=['Battery', 'CVCT'])
         end_time = time.time()
-        print(f"Time taken for calculate_cvct: {end_time - start_time:.2f} seconds")
-        return cvct_df
+        print(f"calculate_cvct function execution time: {end_time - start_time} seconds")
+        return pd.DataFrame(list(cvct_dict.items()), columns=['Battery', 'CVCT'])
 
     def calculate_max_dv_dt(filtered_voltage_data):
-        """
-                   计算每节电池在恒压充电阶段的最大电压变化率（dV/dt）。
-
-                   参数:
-                   data (DataFrame): 包含电压数据的DataFrame，必须包含以下列:
-                       - 'timestamp': 时间戳
-                       - 'clique_name': 电池名称
-                       - 'val': 电压值
-
-                   返回:
-                   DataFrame: 包含每节电池最大dV/dt值的DataFrame，列为:
-                       - 'Battery': 电池名称
-                       - 'Max_dV/dt': 最大电压变化率（dV/dt）
-
-                   详细说明:
-                   1. 遍历每节电池的数据，提取其时间戳和电压值。
-                   2. 计算时间差和电压差，以获得电压变化率（dV/dt）。
-                   3. 找到电压变化率的最大值。
-                   4. 返回一个包含每节电池名称及其最大dV/dt值的DataFrame。
-                   """
         start_time = time.time()
+        """
+           计算每节电池在恒压充电阶段的最大电压变化率（dV/dt）。
 
+           参数:
+           data (DataFrame): 包含电压数据的DataFrame，必须包含以下列:
+               - 'timestamp': 时间戳
+               - 'clique_name': 电池名称
+               - 'val': 电压值
+
+           返回:
+           DataFrame: 包含每节电池最大dV/dt值的DataFrame，列为:
+               - 'Battery': 电池名称
+               - 'Max_dV/dt': 最大电压变化率（dV/dt）
+
+           详细说明:
+           1. 遍历每节电池的数据，提取其时间戳和电压值。
+           2. 计算时间差和电压差，以获得电压变化率（dV/dt）。
+           3. 找到电压变化率的最大值。
+           4. 返回一个包含每节电池名称及其最大dV/dt值的DataFrame。
+           """
         batteries = [f'单体电池电压2V-{i:03d}电池' for i in range(1, 25)]
         max_dv_dt_dict = {}
 
@@ -294,23 +295,19 @@ def main_function():
                 time_diff = np.diff(battery_data['timestamp'])
                 voltage_diff = np.diff(battery_data['val'])
                 dv_dt = voltage_diff / time_diff
-
+                # 找到最大dV/dt值
                 max_dv_dt = np.max(dv_dt)
             else:
                 max_dv_dt = np.nan
 
             max_dv_dt_dict[battery] = max_dv_dt
-
-        max_dv_dt_df = pd.DataFrame(list(max_dv_dt_dict.items()), columns=['Battery', 'Max_dV/dt'])
         end_time = time.time()
-        print(f"Time taken for calculate_max_dv_dt: {end_time - start_time:.2f} seconds")
-        return max_dv_dt_df
+        print(f"calculate_max_dv_dt function execution time: {end_time - start_time} seconds")
 
-    def calculate_dtw(filtered_voltage_data):
+        return pd.DataFrame(list(max_dv_dt_dict.items()), columns=['Battery', 'Max_dV/dt'])
+
+    def calculate_dtw(initial_curve, current_curve):
         start_time = time.time()
-
-        initial_curve = filtered_voltage_data[filtered_voltage_data['time'] <= filtered_voltage_data['DTW_wasserstein_initial_time_cutoff'].iloc[0]]
-        current_curve = filtered_voltage_data[filtered_voltage_data['time'] >= filtered_voltage_data['DTW_wasserstein_current_time_cutoff'].iloc[0]]
 
         def dtw(A, B):
             n, m = len(A), len(B)
@@ -335,7 +332,6 @@ def main_function():
             return V_DTW
 
         dtw_distances = []
-
         for i in range(1, 25):
             battery_name = f'单体电池电压2V-{i:03d}电池'
             initial_curve_battery = initial_curve[initial_curve['clique_name'] == battery_name]['val'].values
@@ -347,19 +343,15 @@ def main_function():
             else:
                 dtw_distances.append((battery_name, None))
 
-        dtw_distances_df = pd.DataFrame(dtw_distances, columns=['Battery', 'DTW_distance'])
         end_time = time.time()
-        print(f"Time taken for calculate_dtw: {end_time - start_time:.2f} seconds")
-        return dtw_distances_df
+        print(f"calculate_dtw function execution time: {end_time - start_time} seconds")
 
-    def calculate_wasserstein_distance(filtered_voltage_data):
+        return pd.DataFrame(dtw_distances, columns=['Battery', 'DTW_distance'])
+
+    def calculate_wasserstein_distance(initial_curve, current_curve):
         start_time = time.time()
 
-        initial_curve = filtered_voltage_data[filtered_voltage_data['time'] <= filtered_voltage_data['DTW_wasserstein_initial_time_cutoff'].iloc[0]]
-        current_curve = filtered_voltage_data[filtered_voltage_data['time'] >= filtered_voltage_data['DTW_wasserstein_current_time_cutoff'].iloc[0]]
-
         wasserstein_distances = []
-
         for i in range(1, 25):
             battery_name = f'单体电池电压2V-{i:03d}电池'
             initial_curve_battery = initial_curve[initial_curve['clique_name'] == battery_name]['val'].values
@@ -371,20 +363,66 @@ def main_function():
             else:
                 wasserstein_distances.append((battery_name, None))
 
-        wasserstein_distances_df = pd.DataFrame(wasserstein_distances, columns=['Battery', 'Wasserstein_distance'])
         end_time = time.time()
-        print(f"Time taken for calculate_wasserstein_distance: {end_time - start_time:.2f} seconds")
-        return wasserstein_distances_df
+        print(f"calculate_wasserstein_distance function execution time: {end_time - start_time} seconds")
 
+        return pd.DataFrame(wasserstein_distances, columns=['Battery', 'Wasserstein_distance'])
+
+    def inner_function_vis():
+        voltage_file = '电压.csv'
+        current_file = '电流.csv'
+
+        voltage_data = pd.read_csv(voltage_file)
+        current_data = pd.read_csv(current_file)
+
+        voltage_data['time'] = pd.to_datetime(voltage_data['time'])
+        current_data['time'] = pd.to_datetime(current_data['time'])
+
+        fig, ax1 = plt.subplots(figsize=(15, 10))
+
+        ax1.set_xlabel('Time')
+        ax1.set_ylabel('Current (A)', color='tab:blue')
+        ax1.plot(current_data['time'], current_data['val'], color='tab:blue', label='Current')
+        ax1.tick_params(axis='y', labelcolor='tab:blue')
+        ax1.grid(which='both', linestyle='--', linewidth=0.5)
+
+        ax2 = ax1.twinx()
+        ax2.set_ylabel('Voltage (V)', color='tab:red')
+
+        for column_name in voltage_data['clique_name'].unique():
+            if column_name.startswith('单体电池电压2V-') and column_name.endswith('电池'):
+                battery_data = voltage_data[voltage_data['clique_name'] == column_name]
+                ax2.plot(battery_data['time'], battery_data['val'], label=column_name)
+
+        ax2.tick_params(axis='y', labelcolor='tab:red')
+
+        fig.tight_layout()
+        ax1.legend(loc='upper left')
+        ax2.legend(loc='upper right')
+
+        ax2.yaxis.set_major_locator(plt.MultipleLocator(0.1))
+        ax2.yaxis.set_minor_locator(plt.MultipleLocator(0.02))
+        ax1.yaxis.set_major_locator(plt.MultipleLocator(1))
+        ax1.yaxis.set_minor_locator(plt.MultipleLocator(0.2))
+        plt.title('Current and Voltage over Time')
+        plt.show()
+
+    inner_function_vis()
 
     cvct_df = calculate_cvct(filtered_voltage_data)
+
     max_dv_dt_df = calculate_max_dv_dt(filtered_voltage_data)
-    dtw_distances_df = calculate_dtw(filtered_voltage_data)
-    wasserstein_distances_df = calculate_wasserstein_distance(filtered_voltage_data)
 
-    merged_df = cvct_df.merge(max_dv_dt_df, on='Battery').merge(dtw_distances_df, on='Battery').merge(
-        wasserstein_distances_df, on='Battery')
-    print(merged_df)
+    dtw_distances_df = calculate_dtw(initial_curve, current_curve)
 
-# 调用主函数
+    wasserstein_distances_df = calculate_wasserstein_distance(initial_curve, current_curve)
+
+    combined_df = pd.merge(cvct_df, max_dv_dt_df, on='Battery')
+    combined_df = pd.merge(combined_df, dtw_distances_df, on='Battery')
+    combined_df = pd.merge(combined_df, wasserstein_distances_df, on='Battery')
+
+    print(combined_df)
+
+
 main_function()
+
